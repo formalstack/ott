@@ -11,6 +11,7 @@
 . . . . . + ../tests/test_jan_2006-09-08.ott
 + + . + + + ../tests/test_lists_coq_list_functions_4.ott
 + + . + + + ../tests/test_lists_coq_list_functions_3.ott
++ + . + + + ../tests/test_lists_coq_defn_subrule_4.ott
 + + . + + + ../tests/test_lists_coq_defn_subrule_3.ott
 + + . + + + ../tests/test_lists_coq_defn_subrule_2.ott
 + + . + + + ../tests/test_lists_coq_defn_subrule_1.ott 
