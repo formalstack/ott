@@ -922,11 +922,11 @@ let pp_pp_raw_metavar_defn yo generate_aux_info xd ts md =
         | Some [Hom_string s] when s="string" -> 
            Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " string \"\\\"\" ^^ string " ^ svi ^ " ^^ string \"\\\"\"\n\n")
         | Some [Hom_string s] when s="int" -> 
-           Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " string_of_int " ^ svi ^ "\n\n")
+           Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " string (string_of_int " ^ svi ^ ")\n\n")
         | Some [Hom_string s] when s="big_int" -> 
-           Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " Big_int.string_of_big_int " ^ svi ^ "\n\n")
+           Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " string (Big_int.string_of_big_int " ^ svi ^ ")\n\n")
         | Some [Hom_string s]  -> 
-           Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " string_of_" ^ s ^ " " ^ svi ^ "\n\n")
+           Some (pp_pp_raw_name md.mvd_name ^ " "^svi^" = " ^ " string (string_of_" ^ s ^ " " ^ svi ^ ")\n\n")
         | Some hs -> Some ("no default for "^md.mvd_name^" ocaml homspec="^Grammar_pp.pp_plain_hom_spec hs ^ "\n\n")
         | None -> Some ("no pp-raw or ocaml hom for "^md.mvd_name^ "\n\n")
        )
@@ -947,11 +947,11 @@ let pp_pp_metavar_defn yo generate_aux_info xd ts md =
         | Some [Hom_string s] when s="string" -> 
            Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ "string " ^ svi ^ " ^^ string \"\"\n\n")
         | Some [Hom_string s] when s="int" -> 
-           Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ "string_of_int " ^ svi ^ "\n\n")
+           Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ "string (string_of_int " ^ svi ^ ")\n\n")
         | Some [Hom_string s] when s="big_int" -> 
-           Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ " Big_int.string_of_big_int " ^ svi ^ "\n\n")
+           Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ "string (Big_int.string_of_big_int " ^ svi ^ ")\n\n")
         | Some [Hom_string s]  -> 
-           Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ " string_of_" ^ s ^ " " ^ svi ^ "\n\n")
+           Some (pp_pp_name md.mvd_name ^ " "^svi^" = " ^ "string (string_of_" ^ s ^ " " ^ svi ^ ")\n\n")
         | Some hs -> Some ("no pp default for "^md.mvd_name^" ocaml homspec="^Grammar_pp.pp_plain_hom_spec hs ^ "\n\n")
         | None -> Some ("no pp or ocaml hom for "^md.mvd_name^ "\n\n")
        )
