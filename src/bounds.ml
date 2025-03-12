@@ -179,9 +179,10 @@ let nt_or_mv_per_bound :
             | [] -> acc
             | (x,y)::xys' -> 
                 try 
-                  let xs0 = List.assoc y acc in
                   let acc0 = List.remove_assoc y acc in 
-                  f ((y,xs0@[x])::acc0) xys'
+                  (* Only keep the first nonterminal or metavariable with a given bound *)
+                  (* This prevents generating tuple types for list elements *)
+                  f ((y,[x])::acc0) xys'
                 with
                   Not_found ->
                     f ((y,[x])::acc) xys' in

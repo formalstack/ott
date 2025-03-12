@@ -77,7 +77,7 @@ let non_free_ntrs : pp_mode -> syntaxdefn -> subrule list -> (nontermroot * nont
     let rec fixedpoint : (NtrSet.t -> NtrSet.t) -> NtrSet.t -> NtrSet.t =
       fun f x ->
         let x' = f x in
-        if NtrSet.equal x x' then x' else f x' in
+        if NtrSet.equal x x' then x' else fixedpoint f x' in
     
     (* all the non_free ntrs that are _not_ on the left of a <:: *)
     let non_ntrs0_non_free_ntrs' = NtrSet.diff (fixedpoint f ntrs0) ntrs0 in
