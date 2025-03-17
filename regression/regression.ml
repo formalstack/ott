@@ -354,7 +354,7 @@ let run_test i n (tn,tl) =
     if (command cmd) = 0
     then begin
       pp_success tgt name;
-      let cmd = "coqc -init-file _ott_coqrc.v "^name^".v > " ^ name ^ ".coq.out" (* was "/dev/null"*)  in
+      let cmd = "coqc -Q ../coq Ott "^name^".v > " ^ name ^ ".coq.out" (* was "/dev/null"*)  in
       let tgt = "Coq" in
       pp_tgt i_of_n tgt cmd;
       if (command cmd) = 0 then begin
@@ -382,7 +382,7 @@ let run_test i n (tn,tl) =
     if (command cmd) = 0
     then begin
       pp_success tgt name;
-      let cmd = "coqc -init-file _ott_coqrc.v "^name^".v" in
+      let cmd = "coqc -Q ../coq Ott "^name^".v" in
       let tgt = "Coq" in
       pp_tgt i_of_n tgt cmd;
       if (command cmd) = 0 then begin
