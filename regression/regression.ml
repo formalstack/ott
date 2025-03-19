@@ -575,7 +575,7 @@ let report tp a b =
     progressions := !progressions + 1;
     ott_progressions := !ott_progressions + 1
   end else 
-    if not a.ott && b.ott 
+    if not a.ott && b.ott && not (a.tp = Skipped || b.tp = Skipped)
     then begin
       regressions := !regressions + 1;
       ott_regressions := !ott_regressions + 1
@@ -839,4 +839,6 @@ let _ =
     end;
     output_string fd "</testsuite>\n";
     close_out fd
-  end
+  end;
+
+  if !regressions != 0 then exit 1
