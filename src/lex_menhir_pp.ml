@@ -111,9 +111,15 @@ let suppress_rule yo r =
   let suppressed_ntr = 
     List.mem r.rule_ntr_name yo.ppm_suppressed_ntrs
   in
+  (* Check if this nonterminal is non-maximal in the subrule hierarchy *)
+  let subrule_non_maximal =
+    match yo.syntaxdefn with
+    | None -> false (* If syntaxdefn is not available, don't suppress anything based on subrules *)
+    | Some xd -> List.exists (function sr -> sr.sr_lower = r.rule_ntr_name) xd.xd_srs
+  in
   [] = r.rule_ps (*List.filter (function p -> not (contains_list p)) r.rule_ps *)
 (*|| suppressed_ntr || (not(yo.ppm_show_meta) && r.rule_semi_meta) || r.rule_meta*)
-  || suppressed_ntr || r.rule_semi_meta
+  || suppressed_ntr || r.rule_semi_meta || subrule_non_maximal
 
 
 (* tokens arise from terminals and metavardefns *)
@@ -1194,7 +1200,10 @@ let pp_menhir_precedences fd ts =
 *)
 
 (* output a menhir source file *)
-let pp_menhir_syntaxdefn m sources _(*xd_quotiented*) xd_unquotiented lookup generate_aux_info oi = let yo = match m with Menhir yo -> yo | _ -> raise (Failure "pp_menhir_systemdefn called with bad ppmode") in 
+let pp_menhir_syntaxdefn m sources _(*xd_quotiented*) xd_unquotiented lookup generate_aux_info oi = 
+  let yo = match m with Menhir yo -> yo | _ -> raise (Failure "pp_menhir_systemdefn called with bad ppmode") in 
+  (* Store the syntax definition for use in rule suppression decisions *)
+  yo.syntaxdefn <- Some xd_unquotiented;
   match oi with
   | (o,is)::[] ->
       let _ = Auxl.filename_check m o in
