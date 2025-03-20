@@ -117,10 +117,16 @@ let pp_subrules m xd srs : int_funcs_collapsed =
   let rec pp_subelement = 
     fun sie de isa_list_name_flag pu srl sru el eu -> match el,eu with
       Lang_nonterm (ntrpl,ntl), Lang_nonterm (ntrpu,ntu) -> 
-        (* Check if there's a direct subrule relationship *)
+        (* Check if there's a direct subrule relationship, checking both the nonterminal
+           and its primary form to handle alias cases *)
         let direct_subrule = 
+          let primary_ntrpl = 
+            try Auxl.primary_ntr_of_ntr xd ntrpl 
+            with Not_found -> ntrpl in
           List.exists 
-            (function sr -> sr.sr_lower=ntrpl && sr.sr_upper=ntrpu)
+            (function sr -> 
+              (sr.sr_lower=ntrpl || sr.sr_lower=primary_ntrpl) && 
+              sr.sr_upper=ntrpu)
             xd.xd_srs
         in
         
@@ -131,7 +137,12 @@ let pp_subrules m xd srs : int_funcs_collapsed =
         else
           (* Try to find the top-level nonterminal for this subrule *)
           (try
-            let ntr_upper = List.assoc ntrpl non_free_ntrs in
+            let primary_ntrpl = 
+              try Auxl.primary_ntr_of_ntr xd ntrpl 
+              with Not_found -> ntrpl in
+            let ntr_upper = 
+              try List.assoc ntrpl non_free_ntrs 
+              with Not_found -> List.assoc primary_ntrpl non_free_ntrs in
             let promoted_upper = Auxl.promote_ntr xd ntr_upper in
             [ "(" ^ (Auxl.pp_is ntrpl promoted_upper) ^ " " 
               ^ Grammar_pp.pp_nonterm_with_sie m xd sie ntu 
