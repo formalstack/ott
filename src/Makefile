@@ -36,7 +36,7 @@ topdir = ..
 OTTVER=0.34
 
 OCAMLFIND=ocamlfind
-OCAMLARGS=-package str -package ocamlgraph -linkpkg
+OCAMLARGS=-package str -package ocamlgraph -package yojson -linkpkg
 
 # for us
 OCAMLC	 	= $(OCAMLFIND) ocamlc $(OCAMLARGS) -g -dtypes  # -w p disables partial match warnings
@@ -69,7 +69,7 @@ SOURCES_NON_LEXER_PARSER2 = grammar_pp.ml parse_table.ml glr.ml new_term_parser.
 	                    quotient_rules.ml grammar_typecheck.ml 		  \
 			    transform.ml substs_pp.ml subrules_pp.ml				  \
 			    embed_pp.ml defns.ml ln_transform.ml coq_induct.ml	  		  \
-                            system_pp.ml lex_menhir_pp.ml align.ml main.ml
+                            system_pp.ml system_pp_json.ml lex_menhir_pp.ml align.ml main.ml
 
 
 
@@ -86,8 +86,9 @@ SOURCES_MLI =           \
   subrules_pp.mli       \
   substs_pp.mli         \
   system_pp.mli         \
-  lex_menhir_pp.mli         \
-  transform.mli		\
+  system_pp_json.mli    \
+  lex_menhir_pp.mli     \
+  transform.mli         \
   term_parser.mli
 
 SOURCES= $(SOURCES_NON_LEXER_PARSER1) 					\

@@ -96,6 +96,7 @@ let coq_use_filter_fn = ref false
 let merge_fragments = ref false
 let picky_multiple_parses = ref false
 let caml_include_terminals = ref false
+let coq_dump_json_filename_opt = ref (None : string option)
 
 let options = Arg.align [
 
@@ -247,6 +248,14 @@ let options = Arg.align [
   ( "-coq_use_filter_fn", 
     Arg.Bool (fun b -> coq_use_filter_fn := b),
     "<"^string_of_bool !coq_use_filter_fn^">  Use list_filter instead of list_minus2 in substitutions" ); 
+(* options for JSON output *)
+  ( "-coq_dump_json",
+    Arg.String (fun s ->
+      match !coq_dump_json_filename_opt with
+      | None -> coq_dump_json_filename_opt  := Some s
+      | Some _ -> Auxl.error None "\nError: multiple -coq_dump_json <filename> not suppported\n"),
+    "<filename>        Path to write JSON systemdefn" );
+
 (* options for OCaml output *)
   ( "-ocaml_include_terminals",
     Arg.Bool (fun b -> caml_include_terminals := b),
@@ -772,7 +781,11 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
             | 1 -> Auxl.avoid_primaries_systemdefn false sd
             | 2 -> Auxl.avoid_primaries_systemdefn true sd
             | _ -> Auxl.error None "coq type-name avoidance must be in {0,1,2}" ) in
-          System_pp.pp_systemdefn_core_io m_coq sd lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_coq sd lookup fi !merge_fragments;
+          (match !coq_dump_json_filename_opt with
+            | Some fname -> System_pp_json.pp_systemdefn_io m_coq sd lookup fname !merge_fragments
+            | _ -> ()
+          )
       | "isa" ->
           System_pp.pp_systemdefn_core_io m_isa sd lookup fi !merge_fragments
       | "hol" ->

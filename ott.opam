@@ -10,6 +10,7 @@ depends: [
   "ocamlbuild" {with-test}
   "ocamlfind" {build | with-test}
   "ocamlgraph"
+  "yojson"
   "pprint" {with-test}
   "menhir" {>= "20151112" & with-test}
 ]
