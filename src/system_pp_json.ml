@@ -2,13 +2,16 @@ module Y = Yojson.Safe;;
 
 open Y
 
-let rec json_option (f : 'a -> Y.t) (v : 'a option) =
+let json_option (f: 'a -> Y.t) (v: 'a option) =
     match v with
     | Some v -> (f v)
     | None -> `Null
 
-and json_string (s: string) =
+let rec json_string (s : string) =
     `String s
+
+and json_stringset (ss : Types.StringSet.t) =
+    `List (List.map (fun s -> `String s) (Types.StringSet.elements ss))
 
 and json_pos (pos : Lexing.position) =
     `Assoc [
@@ -78,16 +81,23 @@ and json_nonterm ((root, suffix) : Types.nonterm) =
         ("suffix", json_suffix suffix)
     ]
 
+and json_metavar ((root, suffix) : Types.metavar) =
+    `Assoc [
+        ("root", `String root);
+        ("suffix", json_suffix suffix)
+    ]
+
 and json_homomorphism ((n,ss) : Types.homomorphism) =
     let spec = List.map (fun hse ->
         match hse with
-        | Types.Hom_string s -> `Assoc [("t", `String "string"); ("value", `String s)]
-        | Types.Hom_index i -> `Assoc [("t", `String "index"); ("value", `Int i)]
-        | Types.Hom_terminal t -> `Assoc [("t", `String "terminal"); ("value", `String t)]
+        | Types.Hom_string s -> `Assoc [("string", `String s)]
+        | Types.Hom_index i -> `Assoc [("index", `Int i)]
+        | Types.Hom_terminal t -> `Assoc [("terminal", `String t)]
         | Types.Hom_ln_free_index (ts,i) -> `Assoc [
-            ("t", `String "ln_free_index");
-            ("values", `List (List.map (fun i -> `Int i) ts));
-            ("value", `Int i)
+            ("ln_free_index", `Assoc [
+                ("values", `List (List.map (fun i -> `Int i) ts));
+                ("value", `Int i)
+            ])
         ]
     ) ss in
     `Assoc [
@@ -95,8 +105,107 @@ and json_homomorphism ((n,ss) : Types.homomorphism) =
         ("spec", `List spec)
     ]
 
-and json_syntaxdefn (syn : Types.syntaxdefn) =
+and json_homomorphisms (lh : Types.homomorphism list) =
+    `List (List.map json_homomorphism lh)
+
+and json_metavardefn (mvd : Types.metavardefn) =
+    `Assoc [
+        ("name", `String mvd.mvd_name);
+        ("names", `List (List.map (fun (n,hs) ->
+            `Assoc [ ("root", `String n); ("homs", json_homomorphisms hs) ]) mvd.mvd_names));
+        ("rep", json_homomorphisms mvd.mvd_rep);
+        ("indexvar", `Bool mvd.mvd_indexvar);
+        ("locally_nameless", `Bool mvd.mvd_locally_nameless);
+        ("phantom", `Bool mvd.mvd_phantom);
+        ("loc", json_loc mvd.mvd_loc)
+    ]
+
+and json_element (e : Types.element) =
+    match e with
+    | Types.Lang_nonterm (r,nt) -> `Assoc [
+        ("nonterm", `Assoc [
+            ("root", `String r);
+            ("nonterm", json_nonterm nt)
+        ])
+    ]
+    | Types.Lang_metavar (r,mv) -> `Assoc [
+        ("metavar", `Assoc [
+            ("root", `String r);
+            ("metavar", json_metavar mv)
+        ])
+    ]
+    | Types.Lang_terminal (t) -> `Assoc [
+        ("terminal", `String t)
+    ]
+    | Types.Lang_option el -> `Assoc [
+        ("option", `List (List.map json_element el))
+    ]
+    | Types.Lang_sugaroption s -> `Assoc [
+        ("sugaroption", `String s)
+    ]
+    | Types.Lang_list elb -> `Assoc [
+        ("bound", json_option json_bound elb.elb_boundo);
+        ("tmo", json_option json_string elb.elb_tmo);
+        ("es", `List (List.map json_element elb.elb_es))
+    ]
+
+and json_bindspec (bs : Types.bindspec) =
     `Null
+
+and json_prod_flavour (pf : Types.prod_flavour) =
+    match pf with
+    | Types.Bar -> `String "bar"
+
+and json_prod (p : Types.prod) =
+    `Assoc [
+        ("name", `String p.prod_name);
+        ("flavour", json_prod_flavour p.prod_flavour);
+        ("meta", `Bool p.prod_meta);
+        ("sugar", `Bool p.prod_sugar);
+        ("categories", json_stringset p.prod_categories);
+        ("es", `List (List.map json_element p.prod_es));
+        ("homs", json_homomorphisms p.prod_homs);
+        ("disambiguate", json_option (fun (s,t) -> `List [ json_string s; json_string t ]) p.prod_disambiguate);
+        ("bs", `List (List.map json_bindspec p.prod_bs));
+        ("loc", json_loc p.prod_loc)
+    ]
+
+and json_rule (rule : Types.rule) =
+    `Assoc [
+        ("name", `String rule.rule_ntr_name);
+        ("names", `List (List.map (fun (r,hs) -> `Assoc [
+            ("root", `String r);
+            ("homs", json_homomorphisms hs)
+        ]) rule.rule_ntr_names));
+        ("pn_wrapper", `String rule.rule_pn_wrapper);
+        ("prods", `List (List.map json_prod rule.rule_ps));
+        ("homs", json_homomorphisms rule.rule_homs);
+        ("meta", `Bool rule.rule_meta);
+        ("semi_meta", `Bool rule.rule_semi_meta);
+        ("phantom", `Bool rule.rule_phantom);
+        ("judgement", `Bool rule.rule_judgement);
+        ("loc", json_loc rule.rule_loc)
+    ]
+
+and json_subrule (sr : Types.subrule) =
+    `Null
+
+and json_syntaxdefn (syn : Types.syntaxdefn) =
+    `Assoc [
+        ("mds", `List (List.map json_metavardefn syn.xd_mds));
+        ("rules", `List (List.map json_rule syn.xd_rs));
+        ("dep", `Null);
+        ("srs", `List (List.map json_subrule syn.xd_srs));
+        ("srd", `Null);
+        ("crs", `Null);
+        ("axs", `Null);
+        ("sbs", `Null);
+        ("fvs", `Null);
+        ("embed_preamble", `List (List.map json_embedmorphism syn.xd_embed_preamble));
+        ("embed", `List (List.map json_embedmorphism syn.xd_embed));
+        ("isa_imports", `List (List.map json_string syn.xd_isa_imports));
+        ("pas", `Null)
+    ]
 
 and json_funclause (fc: Types.funclause) =
     `Assoc [
@@ -113,14 +222,14 @@ and json_fundefn (fd: Types.fundefn) =
         ("result_type", `String fd.fd_result_type);
         ("pn_wrapper", `String fd.fd_pn_wrapper);
         ("clauses", `List (List.map json_funclause fd.fd_clauses));
-        ("homs", `List (List.map json_homomorphism fd.fd_homs));
+        ("homs", json_homomorphisms fd.fd_homs);
         ("loc", json_loc fd.fd_loc)
     ]
 
 and json_fundefnclass (fdc: Types.fundefnclass) =
     `Assoc [
         ("name", `String fdc.fdc_name);
-        ("homs", `List (List.map json_homomorphism fdc.fdc_homs));
+        ("homs", json_homomorphisms fdc.fdc_homs);
         ("fundefns", `List (List.map json_fundefn fdc.fdc_fundefns));
         ("loc", json_loc fdc.fdc_loc)
     ]
@@ -128,13 +237,17 @@ and json_fundefnclass (fdc: Types.fundefnclass) =
 and json_symterm_list_item (stli : Types.symterm_list_item) =
     match stli with
     | Types.Stli_single (loc, es) -> `Assoc [
-        ("loc", json_loc loc);
-        ("list", `List (List.map json_symterm_element es))
+        ("single", `Assoc [
+            ("loc", json_loc loc);
+            ("list", `List (List.map json_symterm_element es))
+        ])
     ]
     | Types.Stli_listform stlb -> `Assoc [
-        ("bound", json_bound stlb.stl_bound);
-        ("elements", `List (List.map json_symterm_element stlb.stl_elements));
-        ("loc", json_loc stlb.stl_loc)
+        ("listform", `Assoc [
+            ("bound", json_bound stlb.stl_bound);
+            ("elements", `List (List.map json_symterm_element stlb.stl_elements));
+            ("loc", json_loc stlb.stl_loc)
+        ])
     ]
 
 and json_symterm_element (ses : Types.symterm_element) =
@@ -145,14 +258,11 @@ and json_symterm_element (ses : Types.symterm_element) =
             ("st", json_symterm st)
         ])
     ]
-    | Ste_metavar (loc,mvr,(mvr2,suff)) -> `Assoc [
+    | Ste_metavar (loc,mvr,mv) -> `Assoc [
         ("metavar", `Assoc [
             ("loc", json_loc loc);
             ("mvr", `String mvr);
-            ("mv", `Assoc [
-                ("mvr", `String mvr2);
-                ("suffix", json_suffix suff)
-            ])
+            ("mv", json_metavar mv)
         ])
     ]
     | Ste_var (loc,mvr,v) -> `Assoc [
@@ -210,20 +320,43 @@ and json_symterm (st : Types.symterm) =
 and json_drule (dr : Types.drule) =
     `Assoc [
         ("name", `String dr.drule_name);
-        ("categories", `List (List.map (json_string) (Types.StringSet.elements dr.drule_categories)));
+        ("categories", json_stringset dr.drule_categories);
         ("premises", `List (List.map (fun (label,term) ->
             `Assoc [
-                ("label", json_option (fun s -> `String s) label);
+                ("label", json_option json_string label);
                 ("term", json_symterm term)
             ]
         ) dr.drule_premises));
         ("conclusion", json_symterm dr.drule_conclusion);
-        ("homs", `List (List.map json_homomorphism dr.drule_homs));
+        ("homs", json_homomorphisms dr.drule_homs);
         ("loc", json_loc dr.drule_loc)
     ]
 
+and json_embed_spec_el (ese : Types.embed_spec_el) =
+    match ese with
+    | Types.Embed_string (loc,s) -> `Assoc [
+        ("string", `Assoc [
+            ("loc", json_loc loc);
+            ("value", json_string s)
+        ])
+    ]
+    | Types.Embed_inner (loc,s) -> `Assoc [
+        ("inner", `Assoc [
+            ("loc", json_loc loc);
+            ("value", json_string s)
+        ])
+    ]
+
 and json_embed_spec (dr : Types.embed_spec) =
-    `Null
+    `List (List.map json_embed_spec_el dr)
+
+and json_embedmorphism (em : Types.embedmorphism) =
+    let (loc,name,spec) = em in
+    `Assoc [
+        ("loc", json_loc loc);
+        ("hom", json_string name);
+        ("spec", json_embed_spec spec)
+    ]
 
 and json_processed_semiraw_rule (psrr : Types.processed_semiraw_rule) =
     match psrr with
@@ -240,14 +373,14 @@ and json_defn (d: Types.defn) =
         ("form", json_symterm d.d_form);
         ("wrapper", `String d.d_wrapper);
         ("rules", `List (List.map json_processed_semiraw_rule d.d_rules));
-        ("homs", `List (List.map json_homomorphism d.d_homs));
+        ("homs", json_homomorphisms d.d_homs);
         ("loc", json_loc d.d_loc)
     ]
 
 and json_defnclass (dc: Types.defnclass) =
     `Assoc [
         ("name", `String dc.dc_name);
-        ("homs", `List (List.map json_homomorphism dc.dc_homs));
+        ("homs", json_homomorphisms dc.dc_homs);
         ("language_names", `List (List.map (fun s -> `String s) dc.dc_language_names));
         ("wrapper", `String dc.dc_wrapper);
         ("defns", `List (List.map json_defn dc.dc_defns));
@@ -266,8 +399,42 @@ and json_fun_or_reln_defnclass (frdc : Types.fun_or_reln_defnclass) =
 and json_relationsdefn (rd : Types.relationsdefn) =
     `List (List.map json_fun_or_reln_defnclass rd)
 
-and json_structure (st : Types.structure) =
-    `Null
+and json_structure_entry (stre : Types.structure_entry) =
+    (match stre with
+    | Types.Struct_md mvr -> `Assoc [
+        ("md", `String mvr)
+    ]
+    | Types.Struct_rs ntrs -> `Assoc [
+        ("rs", `List (List.map json_string ntrs))
+    ]
+    | Types.Struct_srs ntrs -> `Assoc [
+        ("srs", `List (List.map (fun (x,y) -> `List [`String x; `String y]) ntrs))
+    ]
+    | Types.Struct_crs ntrs -> `Assoc [
+        ("srs", `List (List.map (fun (x,y,z) -> `List [`String x; `String y; `String z]) ntrs))
+    ]
+    | Types.Struct_axs auxfns -> `Assoc [
+        ("axs", `List (List.map json_string auxfns))
+    ]
+    | Types.Struct_sbs sbs -> `Assoc [
+        ("sbs", `Null)
+    ]
+    | Types.Struct_fvs fvs -> `Assoc [
+        ("fvs", `Null)
+    ]
+    | Types.Struct_embed embed -> `Assoc [
+        ("embed", `Null)
+    ]
+    | Types.Struct_fun_or_defnclass name -> `Assoc [
+        ("fun_or_defnclass", `String name)
+    ]
+    )
+
+and json_structure (strs : Types.structure) =
+    `List (List.map (fun (name, stre) -> `Assoc [
+        ("name", `String name);
+        ("struct", json_structure_entry stre)
+    ]) strs)
 
 and json_systemdefn (pp : Types.pp_mode) (sd : Types.systemdefn) (lookup : Types.made_parser) =
     `Assoc [
