@@ -144,9 +144,11 @@ and json_element (e : Types.element) =
         ("sugaroption", `String s)
     ]
     | Types.Lang_list elb -> `Assoc [
-        ("bound", json_option json_bound elb.elb_boundo);
-        ("tmo", json_option json_string elb.elb_tmo);
-        ("es", `List (List.map json_element elb.elb_es))
+        ("list", `Assoc [
+            ("bound", json_option json_bound elb.elb_boundo);
+            ("tm", json_option json_string elb.elb_tmo);
+            ("es", `List (List.map json_element elb.elb_es))
+        ])
     ]
 
 and json_bindspec (bs : Types.bindspec) =
