@@ -413,7 +413,7 @@ and json_structure_entry (stre : Types.structure_entry) =
         ("srs", `List (List.map (fun (x,y) -> `List [`String x; `String y]) ntrs))
     ]
     | Types.Struct_crs ntrs -> `Assoc [
-        ("srs", `List (List.map (fun (x,y,z) -> `List [`String x; `String y; `String z]) ntrs))
+        ("crs", `List (List.map (fun (x,y,z) -> `List [`String x; `String y; `String z]) ntrs))
     ]
     | Types.Struct_axs auxfns -> `Assoc [
         ("axs", `List (List.map json_string auxfns))
