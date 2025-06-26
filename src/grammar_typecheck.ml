@@ -408,15 +408,15 @@ let allowable_hom_data =
                     "nonterminal, metavar or indexvar root"));
     ( Hu_metavar , (["isa";"coq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"coq-notation";"coq-universe";"lex";"texvar";"isavar";"holvar";"lemvar";"ocamlvar";"repr-locally-nameless";(*"repr-nominal";*)"phantom";"ocamllex";"ocamllex-remove";"ocamllex-of-string";"pp";"pp-raw";"pp-suppress"],
                     "metavar declaration"));
-    ( Hu_rule    , (["isa";"coq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"coq-notation";"coq-universe";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"phantom";"aux";"auxparam";"menhir-start";"menhir-start-type";"quotient-with";"pp";"pp-raw";"pp-suppress";"pp-params";"lex-comment"],
+    ( Hu_rule    , (["isa";"coq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"coq-notation";"coq-universe";"coq-depth";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"phantom";"aux";"auxparam";"menhir-start";"menhir-start-type";"quotient-with";"pp";"pp-raw";"pp-suppress";"pp-params";"lex-comment"],
                     "rule"));
     ( Hu_rule_meta, (["com"], "special rule"));
-    ( Hu_prod    , (["isa";"coq";"hol";"lem";(*"twf";*)"tex";"texlong";"ocaml";"com";"order";"isasyn";"isaprec";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";
+    ( Hu_prod    , (["isa";"coq";"comp-coq";"prop-output";"coq-measure";"hol";"lem";(*"twf";*)"tex";"texlong";"ocaml";"com";"order";"isasyn";"isaprec";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";
                      "disambiguate";"prec";"leftassoc";"rightassoc";"menhir";"quotient-remove";"menhir-prec";"pp";"pp-raw"],
                     "production"));
     ( Hu_prod_tm , (["isa";                      "tex";"lex";  "com"; "prec";"leftassoc";"rightassoc"],"production of the terminals grammar"));
-    ( Hu_drule   , ([                                          "com"; "tycheck"],"definition rule"));
-    ( Hu_defn    , ([                            "tex";        "com";"isasyn";"isaprec";"disambiguate";"lemwcf"],"definition"));
+    ( Hu_drule   , ([                                          "com"; "coq-choose"; "interleaved-rule"],"definition rule"));
+    ( Hu_defn    , ([                            "tex";"prop-output";"coq-measure";        "com";"isasyn";"isaprec";"disambiguate";"lemwcf"],"definition"));
     ( Hu_defnclass, (["coq-universe"],"defns block"));
     ( Hu_fundefn , (["isa";"coq";"hol";"lem";(*"twf";*)"tex";        "com";"order";"isasyn";"isaprec";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"coq-struct"],"function definition"));
     ( Hu_fundefnclass, ([(* "isa-proof";*)"hol-proof"],"funs block"));
@@ -436,7 +436,7 @@ let embed_allowable_homs = ["coq";"coq-lib";"coq-preamble";
                             "ocaml";"ocaml-preamble";
                             "menhir"]
 
-let list_form_allowable_homs =["isa";"coq";"hol";"lem";"ic";"ch";"ih";"ich";"ichl";"icho";"ichlo";(*"icht";*)"coq-struct";"ocaml"] 
+let list_form_allowable_homs =["isa";"coq";"comp-coq";"prop-output";"hol";"lem";"ic";"ch";"ih";"ich";"ichl";"icho";"ichlo";(*"icht";*)"coq-struct";"ocaml"] 
 
 let cd_disambiguate_hom name rhs hs =
   try 
