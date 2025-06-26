@@ -427,7 +427,7 @@ let allowable_hom_data =
     ( Hu_deadcode, ([], "Internal error: Hu_deadcode"));
   ] 
 
-let embed_allowable_homs = ["coq";"coq-lib";"coq-preamble";
+let embed_allowable_homs = ["coq";"coq-lib";"coq-preamble";"coq-chooser";
                             "isa";"isa-import";"isa-auxfn-proof";"isa-subrule-proof";"isa-lib";"isa-preamble";
                             "hol";"hol-preamble";
                             "lem";"lem-preamble";
