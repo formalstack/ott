@@ -87,6 +87,15 @@ and json_metavar ((root, suffix) : Types.metavar) =
         ("suffix", json_suffix suffix)
     ]
 
+and json_nt_or_mv_root (ntmvr : Types.nt_or_mv_root) =
+    match ntmvr with
+    | Types.Ntr ntr -> `Assoc [
+        ("nonterm", `String ntr)
+    ]
+    | Types.Mvr mvr -> `Assoc [
+        ("metavar", `String mvr)
+    ]
+
 and json_homomorphism ((n,ss) : Types.homomorphism) =
     let spec = List.map (fun hse ->
         match hse with
@@ -190,18 +199,66 @@ and json_rule (rule : Types.rule) =
     ]
 
 and json_subrule (sr : Types.subrule) =
-    `Null
+    `Assoc [
+        ("lower", `String sr.sr_lower);
+        ("upper", `String sr.sr_upper);
+        ("top", `String sr.sr_top);
+        ("homs", json_homomorphisms sr.sr_homs);
+        ("loc", json_loc sr.sr_loc)
+    ]
+
+and json_subrule_promotion (srp : Types.subrule_pn_promotion) =
+    `Assoc [
+        (* `Assoc (
+            List.map (fun (lower, (upper, pairs)) -> (lower, `String upper)) srd.srd_subrule_pn_promotion
+        )) *)
+    ]
+
+and json_subrule_data (srd : Types.subrule_data) =
+    `Assoc [
+        ("proper_subntr_data", `List (
+            List.map (fun (n,c) -> `Assoc [
+                ("top", `String n);
+                ("subs", `List (List.map json_string c))
+            ])
+            srd.srd_proper_subntr_data
+        ));
+        ("graph", `Null);
+        ("promotions", `List (List.map
+            (fun ((sub, (top, namemap))) ->
+                `Assoc [
+                    ("sub", `String sub);
+                    ("top", `String top);
+                    ("names", `List (List.map (fun ((a,b)) -> `List [`String a; `String b]) namemap))
+                ]
+            )
+            srd.srd_subrule_pn_promotion
+        ))
+    ]
+
+and json_subst (sb: Types.subst) =
+    `Assoc [
+        ("name", `String sb.sb_name);
+        ("this", `String sb.sb_this);
+        ("that", json_nt_or_mv_root sb.sb_that);
+        ("multi", `Bool sb.sb_multiple);
+        ("homs", json_homomorphisms sb.sb_homs);
+        ("loc", json_loc sb.sb_loc)
+    ]
 
 and json_syntaxdefn (syn : Types.syntaxdefn) =
     `Assoc [
         ("mds", `List (List.map json_metavardefn syn.xd_mds));
         ("rules", `List (List.map json_rule syn.xd_rs));
         ("dep", `Null);
-        ("srs", `List (List.map json_subrule syn.xd_srs));
-        ("srd", `Null);
+        ("srs", `List (List.map (json_subrule) syn.xd_srs));
+        ("srd", json_subrule_data syn.xd_srd);
         ("crs", `Null);
-        ("axs", `Null);
-        ("sbs", `Null);
+        ("axs", `List (List.map (fun (ax,axt) -> `Assoc [
+            ("name", `String ax);
+            ("type", `Null)
+        ]) syn.xd_axs));
+        ("sbs", `List (List.map json_subst syn.xd_sbs));
         ("fvs", `Null);
         ("embed_preamble", `List (List.map json_embedmorphism syn.xd_embed_preamble));
         ("embed", `List (List.map json_embedmorphism syn.xd_embed));
