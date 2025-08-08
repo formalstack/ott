@@ -1,0 +1,14 @@
+metavar var, X ::=
+  {{ com term variable }}
+  {{ coq nat }}
+  {{ ocaml string }}
+  {{ lex alphanum }}
+
+grammar
+term, t, v :: 't_' ::=         {{ menhir-start }}
+  | T              ::   :: at    {{ quotient-remove }}   {{ ocaml [[T]] }}
+  | { t / X } t'   :: M :: sub {{ ichlo (tsubst_term [[t]] [[X]] [[t']])}}
+
+atomic_term, T :: 't_' ::=       {{ quotient-with t }}
+  | x              ::   :: var
+  | ( t )          ::   :: paren
