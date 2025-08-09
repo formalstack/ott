@@ -972,6 +972,7 @@ and pp_plain_hom_spec hs =
 and capitalize_if_twelf_non_type as_type m s =
   match m,as_type with
   | Twf _,false -> String.capitalize_ascii s
+  | (Caml _ | Lex _ | Menhir _),false -> String.uncapitalize_ascii s
   | _,_ -> s
 
 and pp_pseudo_hom_spec_el hse =

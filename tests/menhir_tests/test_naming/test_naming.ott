@@ -5,10 +5,14 @@ metavar var, X ::=
   {{ lex alphanum }}
 
 grammar
-term, t, v :: 't_' ::=         {{ menhir-start }}
-  | T              ::   :: at    {{ quotient-remove }}   {{ ocaml [[T]] }}
-  | { t / X } t'   :: M :: sub {{ ichlo (tsubst_term [[t]] [[X]] [[t']])}}
+term, t :: 't_' ::= {{ menhir-start }}
+  | X              :: :: var
+  | [ X ]          :: :: list
+  | ( t )          :: :: paren
 
-atomic_term, T :: 't_' ::=       {{ quotient-with t }}
-  | x              ::   :: var
-  | ( t )          ::   :: paren
+atomic_term, A :: 'atomic_' ::=
+  | X              :: :: var
+  | [ X ]          :: :: list
+
+subrules
+  A <:: t

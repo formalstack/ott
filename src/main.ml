@@ -802,7 +802,7 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
       | "menhir" -> 
           let sd_quotiented = Auxl.caml_rename sd in
           let sd_unquotiented = Auxl.caml_rename sd_unquotiented in
-          let xd_quotiented = sd.syntax in
+          let xd_quotiented = sd_quotiented.syntax in
           let xd_unquotiented = sd_unquotiented.syntax in
           let xd_quotiented_unaux = sd_quotiented_unaux.syntax in
           (Lex_menhir_pp.pp_menhir_syntaxdefn m_menhir sd.sources xd_quotiented xd_unquotiented lookup !generate_aux_rules fi;
@@ -821,7 +821,7 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
     | Some filename ->
        let sd_quotiented = Auxl.caml_rename sd in
        let sd_unquotiented = Auxl.caml_rename sd_unquotiented in
-       let xd_quotiented = sd.syntax in
+       let xd_quotiented = sd_quotiented.syntax in
        let xd_unquotiented = sd_unquotiented.syntax in
        let xd_quotiented_unaux = sd_quotiented_unaux.syntax in
        (*      (Lex_menhir_pp.pp_menhir_syntaxdefn m_menhir sd.sources xd_quotiented xd_unquotiented lookup !generate_aux_rules fi;*)
