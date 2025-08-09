@@ -22,8 +22,9 @@ expr :: 'Expr_' ::= {{ menhir-start }}
 %    -- the productions should have ocaml homs (used in the menhir actions)
 %    -- the rule should have pp and pp-raw homs (used in the pp function clauses)
 set :: 'Set_' ::=             {{ phantom }} {{ ocaml element list }}
-    {{ pp-raw es = "set ["^String.concat ";" (List.map pp_raw_element es) ^ "]" }}
-    {{ pp     es = "{"^String.concat "," (List.map pp_element es) ^ "}" }}
+    % {{ pp-raw es = "set ["^String.concat ";" (List.map pp_raw_element es) ^ "]" }}
+    {{ pp-raw es = string "set [" ^^ separate (string ";") (List.map pp_raw_element es) ^^ string "]" }}
+    {{ pp     es = string "{" ^^ separate (string ",") (List.map pp_element es) ^^ string "}" }}
  | { element1 , .. , elementn } :: :: List          {{ ocaml [[element1..elementn]] }}
  | { element }                  :: :: SingletonList {{ ocaml [ [[element]] ] }}
 
@@ -43,8 +44,8 @@ opt_constant :: 'Constant_' ::= {{ ocaml bool }} {{ phantom }}
 % Here's an example for an optional nonterminal
 
 opt_expr :: 'OptExpr_' ::= {{ ocaml expr option }} {{ phantom }}
-    {{ pp-raw oe = match oe with Some e -> pp_raw_expr e | None -> "" }}
-    {{ pp     oe = match oe with Some e -> pp_expr e     | None -> "" }}
+    {{ pp-raw oe = match oe with Some e -> pp_raw_expr e | None -> string "" }}
+    {{ pp     oe = match oe with Some e -> pp_expr e     | None -> string "" }}
     | expr      :: :: Some     {{ ocaml Some [[expr]] }}
     |           :: :: None     {{ ocaml None }}
 
