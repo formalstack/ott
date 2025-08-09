@@ -93,7 +93,7 @@ open Types;;
 
 (* which metavars, rules and productions to include *)
 let suppress_metavar yo mvd =
-  mvd.mvd_indexvar  (* mvd.mvd_phantom *)
+  mvd.mvd_phantom  (* was: mvd.mvd_indexvar - now only suppress phantom metavars *)
 
 let contains_list p = 
   List.exists (function e -> match e with Lang_list _ -> true | _ -> false  )  p.prod_es
