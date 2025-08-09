@@ -1,0 +1,17 @@
+metavar var, X ::=
+  {{ com term variable }}
+  {{ coq nat }}
+  {{ ocaml string }}
+  {{ lex alphanum }}
+
+% like metavars, we need occaml and lex/occamllex homs
+indexvar index, i, j, m, n ::=
+  {{ lex numeral }}
+  {{ coq nat }}
+  {{ ocaml int }}
+
+grammar
+term, t :: 't_' ::= {{ menhir-start }}
+  | n              :: :: num
+  | [ t0 .. tn ]   :: :: list
+  | t . i          :: :: projection
