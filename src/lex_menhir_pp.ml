@@ -446,7 +446,8 @@ let menhir_semantic_value_id_of_ntmv ((ntmvr,suffix) as ntmv) =
   | Si_punct s -> s
   | Si_var (sv,i) -> "Si_var_UNIMPLEMENTED"
   | Si_index i -> string_of_int i in (* ignoring possible name clashes...*)
-  escape (ntmvr ^ String.concat "" (List.map string_of_suffix_item suffix))
+  let result = ntmvr ^ String.concat "" (List.map string_of_suffix_item suffix) in
+  escape (String.uncapitalize_ascii result)
 
 let menhir_semantic_value_id_of_list es = 
   let f e = match e with
