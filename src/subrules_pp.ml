@@ -115,7 +115,7 @@ let pp_subrules m xd srs : int_funcs_collapsed =
      relationship *)
 
   let rec pp_subelement = 
-    fun sie de isa_list_name_flag pu srl sru el eu -> match el,eu with
+    fun sie de isa_list_name_flag pu srl sru el eu unique_var_name_opt -> match el,eu with
       Lang_nonterm (ntrpl,ntl), Lang_nonterm (ntrpu,ntu) -> 
         (* Check if there's a direct subrule relationship, checking both the nonterminal
            and its primary form to handle alias cases *)
@@ -130,9 +130,14 @@ let pp_subrules m xd srs : int_funcs_collapsed =
             xd.xd_srs
         in
         
+        (* Use unique name if provided, otherwise use default *)
+        let var_name = match unique_var_name_opt with
+          | Some name when name <> "" -> name
+          | _ -> Grammar_pp.pp_nonterm_with_sie m xd sie ntu in
+        
         if direct_subrule then
           [ "(" ^ (Auxl.pp_is ntrpl (Auxl.promote_ntr xd ntrpu)) ^ " " 
-            ^ Grammar_pp.pp_nonterm_with_sie m xd sie ntu 
+            ^ var_name
             ^ ")"], [Auxl.pp_is ntrpl (Auxl.promote_ntr xd ntrpu)], []
         else
           (* Try to find the top-level nonterminal for this subrule *)
@@ -145,13 +150,18 @@ let pp_subrules m xd srs : int_funcs_collapsed =
               with Not_found -> List.assoc primary_ntrpl non_free_ntrs in
             let promoted_upper = Auxl.promote_ntr xd ntr_upper in
             [ "(" ^ (Auxl.pp_is ntrpl promoted_upper) ^ " " 
-              ^ Grammar_pp.pp_nonterm_with_sie m xd sie ntu 
+              ^ var_name
               ^ ")"], [Auxl.pp_is ntrpl promoted_upper], []
           with Not_found -> [],[],[])
 
     | Lang_metavar _, Lang_metavar _ -> [],[],[]
     | Lang_terminal _, Lang_terminal _ -> [],[],[]
-    | Lang_option els', Lang_option eus' -> pp_subelements sie de isa_list_name_flag pu els' eus' srl sru
+    | Lang_option els', Lang_option eus' -> 
+        (* For options, we don't have unique names to pass, recurse without them *)
+        let process_elem el eu = pp_subelement sie de isa_list_name_flag pu srl sru el eu None in
+        let results = List.map2 process_elem els' eus' in
+        (fun (a,b,c) -> (List.flatten a), (List.flatten b), (List.flatten c))
+          (Auxl.split3 results)
     | Lang_sugaroption tml', Lang_sugaroption tmu' -> [],[],[]
     | Lang_list elbl, Lang_list elbu -> 
 
@@ -270,7 +280,7 @@ let pp_subrules m xd srs : int_funcs_collapsed =
                       let rhs,deps =
                         let rec_call = 
                           let c,d,f = 
-                            pp_subelement ((Si_var ("_",0))::sie) de isa_list_name_flag pu srl sru (Auxl.head_nt_mv elbl_es) (Auxl.head_nt_mv elbu_es) in
+                            pp_subelement ((Si_var ("_",0))::sie) de isa_list_name_flag pu srl sru (Auxl.head_nt_mv elbl_es) (Auxl.head_nt_mv elbu_es) None in
                           if c = [] 
                           then ""
                           else (String.concat " & " c) ^ " & " (* c has at most length one *) in
@@ -377,8 +387,30 @@ let pp_subrules m xd srs : int_funcs_collapsed =
 	  
   and pp_subelements : suffix_index_env -> dotenv -> bool -> prod -> element list -> element list -> nontermroot -> nontermroot -> string list * nontermroot list * int_func list
       = fun sie de isa_list_name_flag pu els eus srl sru -> 
+        (* Compute unique variable names for all elements in the production *)
+        let compute_element_var_names eus =
+          List.map (function
+            | Lang_nonterm (ntrp, nt) -> 
+                Grammar_pp.pp_nonterm_with_sie m xd sie nt
+            | Lang_metavar (mvrp, mv) -> 
+                Grammar_pp.pp_metavar_with_sie m xd sie mv
+            | _ -> "") eus in
+        let orig_var_names = compute_element_var_names eus in
+        let unique_var_names = Auxl.ensure_unique_names orig_var_names in
+        
+        (* Process each element with its unique name *)
+        let rec process_elements els eus unique_names acc =
+          match els, eus, unique_names with
+          | [], [], [] -> List.rev acc
+          | el::els', eu::eus', un::uns' ->
+              let unique_opt = if un = "" then None else Some un in
+              let result = pp_subelement sie de isa_list_name_flag pu srl sru el eu unique_opt in
+              process_elements els' eus' uns' (result :: acc)
+          | _ -> raise (Invalid_argument "pp_subelements: mismatched lists") in
+        
+        let results = process_elements els eus unique_var_names [] in
 	(fun (a,b,c) -> (List.flatten a), (List.flatten b), (List.flatten c))
-	  (Auxl.split3 (List.map2 (pp_subelement sie de isa_list_name_flag pu srl sru) els eus)) in
+	  (Auxl.split3 results) in
   
   let pp_subprod : dotenv -> bool -> prod -> prod -> nontermroot -> nontermroot -> string list * nontermroot list * int_func list
       = fun de isa_list_name_flag pl pu srl sru -> 

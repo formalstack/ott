@@ -14,21 +14,20 @@ value, v  :: 'value_' ::= {{ com value }} {{ pp-suppress }} {{ menhir-start }}
   | k           ::   :: int   {{ com integer }}
   | ( v1 , v2 ) ::   :: tuple {{ com tuple }}
 
-expr, e  :: 'expr_' ::= {{ com expression }} {{ menhir-start }}
+expr, E, e  :: 'expr_' ::= {{ com expression }} {{ menhir-start }}
   | term        ::   :: term  {{ com term }} {{ quotient-remove }} {{ ocaml [[term]] }}
-  | e1 + e2     ::   :: add   {{ com addition }}
+  | E + e       ::   :: add   {{ com addition }}
 
 term, t :: 'expr_' ::= {{ com term }} {{ quotient-with e }}
   | k           ::   :: int   {{ com integer }}
   | t . k       ::   :: proj  {{ com projection }}
-  | ( e1 , e2 ) ::   :: tuple {{ com tuple }}
+  | ( E , e )   ::   :: tuple {{ com tuple }}
   | ! v         ::   :: not   {{ com not }}
   | - num       ::   :: neg   {{ com neg }}
   | ( e )       :: S :: paren {{ icho [[e]] }}
 
 parsing
-
-expr_add left expr_add
+  expr_add left expr_add
 
 embed {{ menhir %left PLUS }}
 
@@ -37,3 +36,6 @@ embed {{ menhir %left PLUS }}
 subrules
   v <:: e
   num <:: v
+
+substitutions
+  single term nat :: sub_term_in
