@@ -408,7 +408,7 @@ let allowable_hom_data =
                     "nonterminal, metavar or indexvar root"));
     ( Hu_metavar , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"rocq-equality";"coq-notation";"rocq-notation";"coq-universe";"rocq-universe";"lex";"texvar";"isavar";"holvar";"lemvar";"ocamlvar";"repr-locally-nameless";(*"repr-nominal";*)"phantom";"ocamllex";"ocamllex-remove";"ocamllex-of-string";"pp";"pp-raw";"pp-suppress"],
                     "metavar declaration"));
-    ( Hu_rule    , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"rocq-equality";"coq-notation";"rocq-notation";"coq-universe";"rocq-universe";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"ir";"rh";"irh";"irho";"irhl";"irhlo";"phantom";"aux";"auxparam";"menhir-start";"menhir-start-type";"quotient-with";"pp";"pp-raw";"pp-suppress";"pp-params";"lex-comment"],
+    ( Hu_rule    , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"rocq-equality";"coq-notation";"rocq-notation";"coq-universe";"rocq-universe";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"ir";"rh";"irh";"irho";"irhl";"irhlo";"phantom";"aux";"auxparam";"menhir-suppress";"menhir-start";"menhir-start-type";"quotient-with";"pp";"pp-raw";"pp-suppress";"pp-params";"lex-comment"],
                     "rule"));
     ( Hu_rule_meta, (["com"], "special rule"));
     ( Hu_prod    , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"texlong";"ocaml";"com";"order";"isasyn";"isaprec";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"ir";"rh";"irh";"irho";"irhl";"irhlo";

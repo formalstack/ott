@@ -1,0 +1,11 @@
+indexvar index, i, j, m, n ::=
+  {{ lex numeral }}
+  {{ coq nat }}
+  {{ ocaml int }}
+
+grammar
+term, t :: 't_' ::= {{ menhir-start }}
+  | n              :: :: num
+
+unused, u :: 'u_' ::= {{ menhir-suppress }}
+  | n              :: :: num {{ menhir-prec UNKNOWN_SYM }}
