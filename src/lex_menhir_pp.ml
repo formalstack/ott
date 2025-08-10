@@ -106,11 +106,14 @@ let suppress_prod yo p =
  (* contains_list p (* just for now... *)
    ||*) suppressed_category || ((*not(yo.ppm_show_meta) &&*) p.prod_meta && not(p.prod_sugar))
 
+let has_hom hn hs = match Auxl.hom_spec_for_hom_name hn hs with Some _ -> true | None -> false
+
 (* identify which nonterminal-root rules should be suppressed in the generated menhir rule set *)
 let suppress_rule yo r = 
   let suppressed_ntr = 
     List.mem r.rule_ntr_name yo.ppm_suppressed_ntrs
   in
+  let menhir_suppress = has_hom "menhir-suppress" r.rule_homs in
   (* Check if this nonterminal is non-maximal in the subrule hierarchy *)
   let subrule_non_maximal =
     match yo.syntaxdefn with
@@ -119,7 +122,7 @@ let suppress_rule yo r =
   in
   [] = r.rule_ps (*List.filter (function p -> not (contains_list p)) r.rule_ps *)
 (*|| suppressed_ntr || (not(yo.ppm_show_meta) && r.rule_semi_meta) || r.rule_meta*)
-  || suppressed_ntr || r.rule_semi_meta || subrule_non_maximal
+  || suppressed_ntr || r.rule_semi_meta || subrule_non_maximal || menhir_suppress
 
 
 (* tokens arise from terminals and metavardefns *)
@@ -675,8 +678,6 @@ let pp_menhir_prod_action p element_data =
     match args with
     | [] -> ""
     | _ -> "("^ String.concat "," args ^ ")" )
-
-let has_hom hn hs = match Auxl.hom_spec_for_hom_name hn hs with Some _ -> true | None -> false
 
 (* aux rule stuff *)
 (* ...for rules *)
