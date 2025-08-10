@@ -18,10 +18,12 @@ expr, e  :: 'expr_' ::= {{ com expression }} {{ menhir-start }}
   | term        ::   :: term  {{ com term }} {{ quotient-remove }} {{ ocaml [[term]] }}
   | e1 + e2     ::   :: add   {{ com addition }}
 
-term :: 'expr_' ::= {{ com term }} {{ quotient-with expr }}
+term, t :: 'expr_' ::= {{ com term }} {{ quotient-with e }}
   | k           ::   :: int   {{ com integer }}
-  | term . k    ::   :: proj  {{ com projection }}
+  | t . k       ::   :: proj  {{ com projection }}
   | ( e1 , e2 ) ::   :: tuple {{ com tuple }}
+  | ! v         ::   :: not   {{ com not }}
+  | - num       ::   :: neg   {{ com neg }}
   | ( e )       :: S :: paren {{ icho [[e]] }}
 
 parsing
