@@ -656,10 +656,33 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
   | _ -> raise (Failure "unexpected Lang_ form")
         
 
+(* ensure unique names for production elements by adding numeric suffixes when needed *)
+let ensure_unique_element_names element_data =
+  (* Extract the names, apply uniqueness, then update the elements *)
+  let names = Auxl.option_map (fun elem -> elem.semantic_value_id) element_data in
+  let unique_names = Auxl.ensure_unique_names names in
+  
+  (* Now update the elements with the unique names *)
+  let name_pairs = List.combine names unique_names in
+  let name_index = ref 0 in
+  
+  List.map (fun elem ->
+    match elem.semantic_value_id with
+    | None -> elem
+    | Some id ->
+        let unique_id = List.nth unique_names !name_index in
+        incr name_index;
+        if unique_id = id then elem
+        else { elem with 
+               semantic_value_id = Some unique_id;
+               semantic_action = Some unique_id })
+    element_data
+
 let element_data_of_prod xd ts p =
   (* try indenting nonterms iff this production has a top-level terminal *)
   let indent_nonterms = List.exists (function | Lang_terminal _ -> true | _ -> false) p.prod_es in 
-  List.map (element_data_of_element xd ts true indent_nonterms false) p.prod_es
+  let element_data = List.map (element_data_of_element xd ts true indent_nonterms false) p.prod_es in
+  ensure_unique_element_names element_data
 
 
 let pp_menhir_prod_grammar element_data = 
