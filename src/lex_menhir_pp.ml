@@ -274,7 +274,7 @@ let token_names_of_syntaxdefn yo xd : token_data =
             with Not_found -> None) in
           let ocamllex_remove_hom = 
             (try
-	      let hs = List.assoc "ocamllex-remove" mvd.mvd_rep in
+	      let _ = List.assoc "ocamllex-remove" mvd.mvd_rep in
 	      true
             with Not_found -> false) in
           (match ocamllex_hom_opt, ocamllex_remove_hom with
@@ -284,7 +284,7 @@ let token_names_of_syntaxdefn yo xd : token_data =
 (* hack: default to ocamllex-remove *)
 (*              Auxl.error (Some mvd.mvd_loc) ("ocamllex output: no ocamllex or ocamllex-remove hom for "^mvd.mvd_name^"\n")*)
               Some (token_name_of mvd.mvd_name, mvd.mvd_name, TK_metavar(ocaml_type, None, ocamllex_of_string_hom_opt))
-          | Some ocamllex_hom, false -> 
+          | Some ocamllex_hom, true -> 
               Auxl.error (Some mvd.mvd_loc) ("ocamllex output: both ocamllex and ocamllex-remove hom for "^mvd.mvd_name^"\n")
           | None, true -> 
               Some (token_name_of mvd.mvd_name, mvd.mvd_name, TK_metavar(ocaml_type, None, ocamllex_of_string_hom_opt))
