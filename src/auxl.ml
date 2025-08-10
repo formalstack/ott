@@ -936,6 +936,31 @@ and ntmvr_of_symterms sts =
 (** ******************************** *)
 (** ******************************** *)
 
+(* Ensure unique names in a list by adding numeric suffixes to duplicates.
+   Preserves the original order and keeps first occurrences unchanged.
+   User-provided names (those already in the list) are preserved when possible.
+   Example: ["x"; "y"; "x"; "x1"; "x"] -> ["x"; "y"; "x2"; "x1"; "x3"] *)
+let ensure_unique_names (names : string list) : string list =
+  (* First pass: collect all original names to see what's already taken *)
+  let original_names = names in
+  
+  let rec make_unique seen result = function
+    | [] -> List.rev result
+    | name :: rest ->
+        if List.mem name seen then
+          (* This name is already used, need to find a unique variant *)
+          let rec find_unique_id base n =
+            let candidate = base ^ string_of_int n in
+            if List.mem candidate seen || List.mem candidate original_names then 
+              find_unique_id base (n + 1)
+            else candidate in
+          let unique_name = find_unique_id name 1 in
+          make_unique (unique_name :: seen) (unique_name :: result) rest
+        else
+          (* First occurrence of this name, keep it as is *)
+          make_unique (name :: seen) (name :: result) rest in
+  make_unique [] [] names
+
 let fresh_suffix : suffix list -> suffix -> suffix = 
   fun suffs suff0 ->
     let suffix_nums suffs = 

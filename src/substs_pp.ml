@@ -546,12 +546,15 @@ let rec pp_subst_symterm
     (p : prod) 
     (dependencies) 
     (sie : suffix_index_env) (de : dotenv)
-    (st : symterm) : string =
+    (st : symterm) (unique_var_name_opt : string option) : string =
   match st with
   | St_node (l,stnb) -> 
       raise ThisCannotHappen (* never occurs in a canonical symterm_element *)
   | St_nonterm (l,ntrp,nt)  -> 
-      let nt_s = Grammar_pp.pp_nonterm_with_de_with_sie m xd sie de nt in
+      let nt_s = 
+        match unique_var_name_opt with
+        | Some name -> name  (* Use the provided unique name *)
+        | None -> Grammar_pp.pp_nonterm_with_de_with_sie m xd sie de nt in
       (* if there isn't a dependency, don't generate the recursive call *)
       if not(List.mem ntrp domain) then 
         (* - just repeat the nonterm instead *)
@@ -731,16 +734,18 @@ and pp_subst_symterm_element
     (p : prod) 
     (dependencies) 
     (sie : suffix_index_env) (de : dotenv)
-    (ste : symterm_element) : string * int_func list =
+    (ste : symterm_element) (unique_var_name_opt : string option) : string * int_func list =
   match ste with
   | Ste_st(_,st) -> 
       ( pp_subst_symterm 
 	  m xd subst domain rule_ntr_name 
 	  this_var that_var that_var_fresh_suffix 
-	  sub_var in_var p dependencies sie de st, [] )
+	  sub_var in_var p dependencies sie de st unique_var_name_opt, [] )
   | Ste_metavar (l,mvrp,mv) -> 
       (* if not (boundedness_of_metavar xd p that_var mv) then *)
-        ( Grammar_pp.pp_metavar_with_de_with_sie m xd sie de mv, [] )
+        ( (match unique_var_name_opt with
+          | Some name -> name  (* Use the provided unique name *)
+          | None -> Grammar_pp.pp_metavar_with_de_with_sie m xd sie de mv), [] )
       (* else *)
       (*  "<<wibble>>" *)
 
@@ -755,7 +760,7 @@ and pp_subst_symterm_element
 	  pp_subst_symterm_list_body 
 	    m xd subst domain isa_list_name_flag rule_ntr_name 
 	    this_var that_var that_var_fresh_suffix 
-	    sub_var in_var p dependencies sie de stlb
+	    sub_var in_var p dependencies sie de stlb unique_var_name_opt
       | _-> 
 	  raise ThisCannotHappen(*never occurs in a canonical symterm_element*) )
 
@@ -781,7 +786,7 @@ and pp_subst_symterm_list_body
     (p : prod) 
     (dependencies) 
     (sie : suffix_index_env) (de : dotenv)
-    (stlb : symterm_list_body) : string * int_func list =
+    (stlb : symterm_list_body) (unique_var_name_opt : string option) : string * int_func list =
 
   (* code similar to pp_symterm_list_body in grammar_pp.ml - refactor? *)
   let (de1,de2)=de in
@@ -791,10 +796,10 @@ and pp_subst_symterm_list_body
   let pp_body_tmp, list_funcs = 
     List.split
       (List.map 
-	 (pp_subst_symterm_element 
+	 (fun elem -> pp_subst_symterm_element 
 	    m xd subst domain isa_list_name_flag rule_ntr_name 
 	    this_var that_var that_var_fresh_suffix 
-	    sub_var in_var p dependencies ((Si_var ("_",0))::sie) de) 
+	    sub_var in_var p dependencies ((Si_var ("_",0))::sie) de elem None) 
 	 stlb.stl_elements) in
   
   let pp_body = 
@@ -1226,14 +1231,29 @@ let pp_subst_prod
           (substituted_singleton_rhs mvr_s)
 
       | es -> 
+	  (* Extract original variable names from elements *)
+	  let orig_var_names = 
+	    List.map (fun ste ->
+	      match ste with
+	      | Ste_st(_,St_nonterm(_,_,nt)) -> Grammar_pp.pp_nonterm_with_de_with_sie m xd sie de nt
+	      | Ste_metavar(_,_,mv) -> Grammar_pp.pp_metavar_with_de_with_sie m xd sie de mv
+	      | _ -> ""  (* For other cases, use empty string *)
+	    ) lhs_stnb.st_es in
+	  
+	  (* Make names unique using the same algorithm as pattern generation *)
+	  let unique_var_names = Auxl.ensure_unique_names orig_var_names in
+	  
+	  (* Process elements with unique names *)
 	  let pp_body, list_funcs =
 	    List.split
-	      (List.map 
-                 (pp_subst_symterm_element 
-		    m xd subst domain isa_list_name_flag rule_ntr_name 
-		    this_var that_var that_var_fresh_suffix 
-		    sub_var in_var p dependencies sie de)
-                 lhs_stnb.st_es) in
+	      (List.map2 
+                 (fun ste unique_name ->
+		   pp_subst_symterm_element 
+		     m xd subst domain isa_list_name_flag rule_ntr_name 
+		     this_var that_var that_var_fresh_suffix 
+		     sub_var in_var p dependencies sie de ste 
+		     (if unique_name = "" then None else Some unique_name))
+                 lhs_stnb.st_es unique_var_names) in
           [ "",
 	    ( match m with 
             | Caml _ -> 

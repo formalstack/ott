@@ -3506,11 +3506,13 @@ and pp_symterm_node_body m xd sie de stnb : string =
 	          | [] -> (String.capitalize_ascii promoted_pn)
 	          | _  ->
                       let pp_es = pp_es() in
+                      (* Ensure unique pattern variable names *)
+                      let unique_pp_es = Auxl.ensure_unique_names pp_es in
 		      "("
                       ^ (String.capitalize_ascii promoted_pn)^" "
-                      ^ ( if List.length pp_es = 1 
-                          then List.hd pp_es
-                          else "("^String.concat  "," pp_es^")" )
+                      ^ ( if List.length unique_pp_es = 1 
+                          then List.hd unique_pp_es
+                          else "("^String.concat  "," unique_pp_es^")" )
                       ^ ")"  )
               | Lem _ -> 
 	          ( match stnb.st_es with
