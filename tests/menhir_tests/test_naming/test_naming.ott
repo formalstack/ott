@@ -1,4 +1,4 @@
-metavar var, X ::=
+metavar var, X, x ::=
   {{ com term variable }}
   {{ coq nat }}
   {{ ocaml string }}
@@ -7,12 +7,12 @@ metavar var, X ::=
 grammar
 term, t :: 't_' ::= {{ menhir-start }}
   | X              :: :: var
-  | [ X ]          :: :: list
+  | [ X ] x x1     :: :: list
   | ( t )          :: :: paren
 
 atomic_term, A :: 'atomic_' ::=
   | X              :: :: var
-  | [ X ]          :: :: list
+  | [ X ] x x1     :: :: list
 
 subrules
   A <:: t
