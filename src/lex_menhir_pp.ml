@@ -524,25 +524,37 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
 
   | Lang_nonterm (ntr,nt) ->
       let svi = menhir_semantic_value_id_of_ntmv nt in 
+      (* Check if this nonterminal is suppressed due to subrules *)
+      let subrule_opt = 
+        try Some (List.find (function sr -> sr.sr_lower = ntr) xd.xd_srs) 
+        with Not_found -> None in
+      let (actual_ntr, runtime_check) = 
+        match subrule_opt with
+        | Some sr -> (sr.sr_top, Some ("is_" ^ ntr ^ "_of_" ^ sr.sr_top))
+        | None -> (ntr, None) in
+      let actual_semantic_action = 
+        match runtime_check with
+        | Some check -> Some ("(if " ^ check ^ " " ^ svi ^ " then " ^ svi ^ " else raise Parsing.Parse_error)")
+        | None -> Some svi in
       { semantic_value_id = Some svi;
-        grammar_body      = menhir_nonterminal_id_of_ntr ntr;
-        semantic_action   = Some svi;
-        pp_raw_rhs        = Some (pp_pp_raw_name ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd ntr) ^ " " ^ svi);
+        grammar_body      = menhir_nonterminal_id_of_ntr actual_ntr;
+        semantic_action   = actual_semantic_action;
+        pp_raw_rhs        = Some (pp_pp_raw_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi);
         pp_json_rhs       = Some (
                                 (if no_json_key then
                                   ""
                                 else
                                   "string \"" ^ pp_json_key (Grammar_pp.pp_plain_nonterm nt)  ^ ":\" ^^ ")
-                                ^ pp_pp_json_name ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd ntr) ^ " " ^ svi);
+                                ^ pp_pp_json_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi);
         pp_pretty_rhs     
-          = match Auxl.hom_spec_for_hom_name "pp-suppress" (Auxl.rule_of_ntr_nonprimary xd ntr).rule_homs with 
+          = match Auxl.hom_spec_for_hom_name "pp-suppress" (Auxl.rule_of_ntr_nonprimary xd actual_ntr).rule_homs with 
           | Some hs ->
               None
           | None -> 
               if indent_nonterms then
-                Some ("nest 2 (" ^ pp_pp_name ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd ntr) ^ " " ^ svi ^")")
+                Some ("nest 2 (" ^ pp_pp_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi ^")")
               else
-                Some ("" ^ pp_pp_name ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd ntr) ^ " " ^ svi ^"";) }
+                Some ("" ^ pp_pp_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi ^"";) }
 
   | Lang_metavar (mvr,mv) -> (* assuming all metavars map onto string-containing tokens *)
       let svi = menhir_semantic_value_id_of_ntmv mv in 
