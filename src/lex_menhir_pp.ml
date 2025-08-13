@@ -790,7 +790,7 @@ let pp_menhir_prod yo generate_aux_info_here xd ts r p =
     let element_data' = element_data @ if generate_aux_info_for_prod generate_aux_info_here r p then [aux_constructor_element] else [] in
     let ppd_action = 
       let es' = Grammar_pp.apply_hom_order (Menhir yo) xd p in
-      if p.prod_sugar || (has_hom "quotient-remove" p.prod_homs && has_hom "ocaml" p.prod_homs) || r.rule_phantom then 
+      if p.prod_sugar || (has_hom "quotient-remove" p.prod_homs && has_hom "ocaml" p.prod_homs) || r.rule_phantom || has_hom "ocaml" r.rule_homs then 
         (* ocaml hom case *)
         (* to do the proper escaping of nonterms within the hom, we need to pp here, not reuse the standard machinery *)
 "(*Case 1*) " ^ 
