@@ -1,0 +1,21 @@
+metavar ident, x ::=
+  {{ lex alphanum }}
+  {{ rocq string }}
+  {{ rocq-equality apply string_dec. }}
+  {{ ocaml string }}
+  {{ ocamllex ['a'-'z']['a'-'z''A'-'Z''0'-'9''_']* }}
+
+indexvar index, i, j, m, n ::=
+  {{ lex numeral }}
+  {{ coq nat }}
+  {{ ocaml int }}
+
+grammar
+term :: 'term_' ::= {{ rocq-universe Type }} {{ menhir-start }}
+  | [ S ]  ::   :: fn      {{ com function declaration }}
+
+set, S :: 'Set_' ::= {{ ocaml ident list }}
+  {{ pp-raw i = string "set [" ^^ separate (string ";") (List.map pp_raw_ident i) ^^ string "]" }}
+  {{ pp     i = string "{" ^^ separate (string ",") (List.map pp_ident i) ^^ string "}" }}
+  | { }                 :: :: empty   {{ ocaml [] }}
+  | S { </ xi // i /> } :: :: append  {{ ocaml [[ </ xi // i /> ]] @ [[S]] }}
