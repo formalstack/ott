@@ -227,26 +227,37 @@ let coalesce_bounds xd loc x : ((nt_or_mv * subntr_data) * bound option) list =
   in
   
   (* Process each nonterminal and suffix pair *)
-  List.map (fun (ntmv, sf) -> 
-    let entries = entries_for ntmv sf in
-    
-    (* Check for incompatible entries *)
-    List.iter (fun e1 ->
-      List.iter (fun e2 ->
-        let ((_, sd1), bo1) = e1 in
-        let ((_, sd2), bo2) = e2 in
-        
-        if not (compatible_subntr_data sd1 sd2) then
-          raise (Bounds (loc, "incompatible subntr_data for nonterminal " ^ 
-                        (Grammar_pp.pp_nt_or_mv Types.pp_ascii_opts_default xd (ntmv, sf))))
-        else if not (compatible_bounds bo1 bo2) then
-          raise (Bounds (loc, "incompatible bounds for nonterminal " ^ 
-                        (Grammar_pp.pp_nt_or_mv Types.pp_ascii_opts_default xd (ntmv, sf))))
-      ) entries
-    ) entries;
-    
-    merge_entries entries
-  ) by_name_and_suffix
+  (* IMPORTANT: preserve the order from the original list x *)
+  (* Instead of using by_name_and_suffix order, we filter x to get unique entries *)
+  let seen = ref [] in
+  List.fold_left (fun acc ((((ntmv, sf), _), _) as entry) ->
+    let key = (ntmv, sf) in
+    if List.mem key !seen then
+      acc  (* Skip duplicates *)
+    else begin
+      seen := key :: !seen;
+      (* Get all entries for this (ntmv, sf) *)
+      let entries = entries_for ntmv sf in
+      
+      (* Check for incompatible entries *)
+      List.iter (fun e1 ->
+        List.iter (fun e2 ->
+          let ((_, sd1), bo1) = e1 in
+          let ((_, sd2), bo2) = e2 in
+          
+          if not (compatible_subntr_data sd1 sd2) then
+            raise (Bounds (loc, "incompatible subntr_data for nonterminal " ^ 
+                          (Grammar_pp.pp_nt_or_mv Types.pp_ascii_opts_default xd (ntmv, sf))))
+          else if not (compatible_bounds bo1 bo2) then
+            raise (Bounds (loc, "incompatible bounds for nonterminal " ^ 
+                          (Grammar_pp.pp_nt_or_mv Types.pp_ascii_opts_default xd (ntmv, sf))))
+        ) entries
+      ) entries;
+      
+      (* Add the merged entry to the accumulator *)
+      acc @ [merge_entries entries]
+    end
+  ) [] x
 
 (*invert, calculating, for each bound, the nt_or_mv that have that bound*)
 let nt_or_mv_per_bound :
