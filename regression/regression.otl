@@ -105,3 +105,4 @@ sys-purercdsub : ../examples/tapl/common.ott ../examples/tapl/common_typing.ott 
 ../tests/test8.rocq.ott
 ../tests/gmap1.rocq.ott
 ../tests/test_rocq_keywords.ott
+../tests/test_ordering_1.ott
