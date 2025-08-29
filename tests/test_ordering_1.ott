@@ -1,0 +1,38 @@
+metavar ident, x ::=
+  {{ lex alphanum }}
+  {{ rocq nat }}
+
+indexvar index, i, j, m, n ::=
+  {{ lex numeral }}
+  {{ rocq nat }}
+
+grammar
+
+ty, t :: ty_ ::=
+  | unit                 ::   :: unit
+  | ( </ xi ti // i /> ) ::   :: prod
+
+formula :: formula_ ::= {{ com formulas }}
+  | judgement                                          ::   :: judgement
+  | distinct </ xi // i />                             ::   :: distinct
+    {{ rocq NoDup [[ </ xi // i /> ]] }}
+  | distinct </ xi ti // i />                          ::   :: distinct_tag
+    {{ rocq NoDup (map (fun '(x_, t_) => x_) [[ </ xi ti // i /> ]]) }}
+
+defns tester :: T ::=
+
+  defn t1 <: t2 :: Sub :: Sub :: '' by
+
+  distinct </ xi ti // i />
+  ----------------------------- :: Good
+  (xi ti) <: (</ xi ti // i />)
+
+  distinct </ xi // i />
+  ----------------------------- :: Wonky
+  (xi ti) <: (</ xi ti // i />)
+
+embed {{ rocq
+
+Definition check_good_type := @TGood (cons (0, ty_unit) nil).
+Definition check_wonky_type := @TWonky (cons (0, ty_unit) nil).
+}}
