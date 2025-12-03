@@ -107,3 +107,7 @@ sys-purercdsub : ../examples/tapl/common.ott ../examples/tapl/common_typing.ott 
 ../tests/test_rocq_keywords.ott
 ../tests/test_cr_metahoms.ott
 ../tests/test_ordering_1.ott
+../tests/test_grammar_embed_1.ott
+../tests/test_grammar_embed_2.ott
+../tests/test_grammar_embed_3.ott
+../tests/test_grammar_embed_4.ott
