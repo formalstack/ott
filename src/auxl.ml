@@ -1175,8 +1175,8 @@ and rename_freevar map fv =
     fv_that = rename_nt_or_mv_root map fv.fv_that; }
 
 and rename_parsing_annotations map pas =
-  { pa_data = List.map (fun (ntr1,pa_type,ntr2,l)-> 
-      (rename_nontermroot map ntr1,pa_type,rename_nontermroot map ntr2,l)) pas.pa_data }
+  { pa_data = List.map (fun (pn1,pa_type,pn2,l) ->
+      (rename_prodname map pn1, pa_type, rename_prodname map pn2, l)) pas.pa_data }
 
 and rename_dependencies map xddep =
   { xd_dep_ts = List.map (List.map (rename_nt_or_mv_root map)) xddep.xd_dep_ts;

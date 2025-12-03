@@ -49,8 +49,8 @@ In the quotiented grammar, for each rule with a {{ quotient-with ntr }} hom:
 
 Any productions with a {{ quotient-remove }} hom is discarded.
 
-Implementation: This is done on raw_syntaxdefn's, in the first part of
-Grammar_typecheck.check_and_disambiguate.  It should be before aux
+Implementation: This is done on the raw item stream, in the first part
+of Grammar_typecheck.check_and_disambiguate.  It should be before aux
 rule synthesis, which makes it easier to do on a per-item basis, ie
 *within* each "grammar" block (perhaps an unfortunate limitation).
 
@@ -208,7 +208,7 @@ let quotient_rules m_tex (rs: raw_rule list) :  raw_rule list =
 *)
   
   (* construct one quotiented rule *)
-  let quotient_rule (r:raw_rule) (rs: (raw_rule * nontermroot) list) : raw_rule = 
+  let quotient_rule (rs_all:raw_rule list) (r:raw_rule) (rs: (raw_rule * nontermroot) list) : raw_rule = 
     
     (* check the production-name prefixes are identical *)
     let () = List.iter (function (r',_) -> if r'.raw_rule_pn_wrapper <> r.raw_rule_pn_wrapper then ty_error2 r'.raw_rule_loc ("quotiented rule production-name prefix "^r'.raw_rule_pn_wrapper^" does not match that of the target rule ("^r.raw_rule_pn_wrapper^")") "") rs in
@@ -234,6 +234,14 @@ let quotient_rules m_tex (rs: raw_rule list) :  raw_rule list =
       let homs' = tex_hom :: List.filter (function (hn,_,_)-> hn<>"tex") homs in
       (ntr,homs') in
 
+    let participant_names = r.raw_rule_ntr_name :: List.map (fun (r',_) -> r'.raw_rule_ntr_name) rs in
+    let rule_embeds =
+      List.concat
+        (List.map
+           (fun rule -> rule.raw_rule_embeds)
+           (List.filter (fun rule -> List.mem rule.raw_rule_ntr_name participant_names) rs_all))
+    in
+
     { r with 
       raw_rule_ntr_names = List.flatten (r.raw_rule_ntr_names :: List.map (function (r',ntr_target) -> List.map (add_tex_ntr_hom r'.raw_rule_loc ntr_target) r'.raw_rule_ntr_names) rs);
       raw_rule_ps = strip_quotient_remove_prods 
@@ -242,6 +250,7 @@ let quotient_rules m_tex (rs: raw_rule list) :  raw_rule list =
            (List.map 
               (function (r',_) -> (*List.map (rename_raw_prod renaming)*) r'.raw_rule_ps)
               rs)));
+      raw_rule_embeds = rule_embeds;
     }  in
 
   let rec f qd rs_all rs = 
@@ -254,10 +263,9 @@ let quotient_rules m_tex (rs: raw_rule list) :  raw_rule list =
             let rs_ntrs_to_be_quotiented_in = Auxl.option_map (function (ntr',ntrs',ntrlo') -> match ntrlo' with Some (ntr'',l) when List.mem ntr'' ntrs -> Some (ntr',ntr'') | _ -> None) quotient_data in
             (* the actual rules, with the ntr target for each *)
             let rs_to_be_quotiented_in = List.map (function (ntr,ntr_target) -> (List.find (function r' -> r'.raw_rule_ntr_name = ntr) rs_all, ntr_target)) rs_ntrs_to_be_quotiented_in in
-            (quotient_rule r rs_to_be_quotiented_in) :: f qd' rs_all rs')
+            (quotient_rule rs_all r rs_to_be_quotiented_in) :: f qd' rs_all rs')
     | ([], []) -> []
     | _ -> raise (Failure "quotient rules")
 
   in
    f quotient_data rs rs 
-

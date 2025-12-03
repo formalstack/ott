@@ -1237,8 +1237,9 @@ let pp_menhir_precedences fd ts =
 *)
 
 (* output a menhir source file *)
-let pp_menhir_syntaxdefn m sources _(*xd_quotiented*) xd_unquotiented lookup generate_aux_info oi = 
+let pp_menhir_syntaxdefn m sources _(*xd_quotiented*) sd_unquotiented lookup generate_aux_info oi = 
   let yo = match m with Menhir yo -> yo | _ -> raise (Failure "pp_menhir_systemdefn called with bad ppmode") in 
+  let xd_unquotiented = sd_unquotiented.syntax in
   (* Store the syntax definition for use in rule suppression decisions *)
   yo.syntaxdefn <- Some xd_unquotiented;
   match oi with
@@ -1257,7 +1258,12 @@ let pp_menhir_syntaxdefn m sources _(*xd_quotiented*) xd_unquotiented lookup gen
       output_string fd "\n%%\n";
 *)
       output_string fd "\n";
-      Embed_pp.pp_embeds fd m xd_unquotiented lookup xd_unquotiented.xd_embed;
+      Embed_pp.pp_embeds fd m xd_unquotiented lookup
+        (Auxl.option_map
+           (function
+             | (_, Struct_embed embed) -> Some embed
+             | _ -> None)
+           sd_unquotiented.structure);
 
       output_string fd (pp_menhir_start_symbols yo generate_aux_info xd_unquotiented);
       output_string fd "\n\n%%\n\n";
@@ -1312,5 +1318,4 @@ let pp_pp_syntaxdefn m sources xd_quotiented xd_unquotiented xd_quotiented_unaux
                       ^ pp_pp_json_metavar_defns_and_rules yo generate_aux_info xd ts xd.xd_mds xd.xd_rs
                    );
   close_out fd;
-
 

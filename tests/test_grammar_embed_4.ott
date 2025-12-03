@@ -1,0 +1,39 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+term, t :: 't_' ::=
+  | e            ::  :: var
+
+expr, e :: 'e_' ::=
+  | x            ::  :: term
+
+formula :: formula_ ::=
+  | judgement             ::   :: judgement
+  | not ( formula )       ::   :: not
+    {{ coq is_not([[formula]]) }}
+  | bad e                 ::   :: bad
+    {{ coq is_bad([[e]]) }}
+
+embed {{ coq
+
+Definition is_not P := not P.
+}}
+
+terminals :: 'terminals_' ::=
+  | not                   ::   :: not  {{ tex \lnot }}
+
+embed {{ coq
+
+Definition is_bad (e : expr) := False.
+}}
+
+defns
+  Goodness :: '' ::=
+
+defn
+  |- t ::  :: Ok :: Ok  by
+
+  not(bad e)
+  ----------- :: E
+  |- e

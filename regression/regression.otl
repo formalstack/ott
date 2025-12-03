@@ -107,3 +107,14 @@ sys-purercdsub : ../examples/tapl/common.ott ../examples/tapl/common_typing.ott 
 ../tests/test_rocq_keywords.ott
 ../tests/test_cr_metahoms.ott
 ../tests/test_ordering_1.ott
+../tests/test_grammar_embed_1.ott
+../tests/test_grammar_embed_2.ott
+../tests/test_grammar_embed_3.ott
+../tests/test_grammar_embed_4.ott
+../tests/test_grammar_embed_leading.ott
+../tests/test_grammar_embed_phantom_only.ott
+../tests/test_grammar_embed_phantom_first.ott
+../tests/test_grammar_embed_grouped.ott
+../tests/test_grammar_embed_ocaml_rename.ott
+../tests/test_grammar_embed_quotient.ott
+../tests/test_grammar_embed_tex_interleave.ott

@@ -650,9 +650,14 @@ let process source_filenames =
   in
 
 
+  let lookup = Term_parser.make_parser xd in 
+
   if !show_sort then (
     print_endline "********** AFTER CHECK, DISAMBIGUATE AND SORT  *********************\n"; 
-    print_endline (Grammar_pp.pp_syntaxdefn m_ascii xd));
+    print_endline
+      (Grammar_pp.pp_syntaxdefn
+         ~string_of_embeds:(Embed_pp.string_of_embeds m_ascii xd lookup)
+         m_ascii xd lookup));
 
   (* FZ sorting is now performed while checking and disambiguate *)
   (* let xd =  *)
@@ -667,8 +672,6 @@ let process source_filenames =
 
   (* make parser for symbolic terms *)
 
-  let lookup = Term_parser.make_parser xd in 
-  
   begin try
     Grammar_typecheck.check_with_parser lookup xd
   with
@@ -786,17 +789,17 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
             | 1 -> Auxl.avoid_primaries_systemdefn false sd
             | 2 -> Auxl.avoid_primaries_systemdefn true sd
             | _ -> Auxl.error None "rocq type-name avoidance must be in {0,1,2}" ) in
-          System_pp.pp_systemdefn_core_io m_coq sd lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_coq sd sd.syntax lookup fi !merge_fragments
       | "isa" ->
-          System_pp.pp_systemdefn_core_io m_isa sd lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_isa sd sd.syntax lookup fi !merge_fragments
       | "hol" ->
-          System_pp.pp_systemdefn_core_io m_hol sd lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_hol sd sd.syntax lookup fi !merge_fragments
       | "lem" ->
-          System_pp.pp_systemdefn_core_io m_lem sd lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_lem sd sd.syntax lookup fi !merge_fragments
       | "twf" -> 
-          System_pp.pp_systemdefn_core_io m_twf sd lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_twf sd sd.syntax lookup fi !merge_fragments
       | "ocaml" -> 
-          System_pp.pp_systemdefn_core_io m_caml (Auxl.caml_rename sd) lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_caml (Auxl.caml_rename sd) sd.syntax lookup fi !merge_fragments
       | "lex" -> 
           Lex_menhir_pp.pp_lex_systemdefn m_lex (Auxl.caml_rename sd) fi
       | "menhir" -> 
@@ -805,7 +808,7 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
           let xd_quotiented = sd_quotiented.syntax in
           let xd_unquotiented = sd_unquotiented.syntax in
           let xd_quotiented_unaux = sd_quotiented_unaux.syntax in
-          (Lex_menhir_pp.pp_menhir_syntaxdefn m_menhir sd.sources xd_quotiented xd_unquotiented lookup !generate_aux_rules fi;
+          (Lex_menhir_pp.pp_menhir_syntaxdefn m_menhir sd.sources xd_quotiented sd_unquotiented lookup !generate_aux_rules fi;
            Lex_menhir_pp.pp_pp_syntaxdefn m_menhir sd.sources xd_quotiented xd_unquotiented xd_quotiented_unaux !generate_aux_rules true fi "")
 
      | _ -> Auxl.int_error("unknown target "^t))
