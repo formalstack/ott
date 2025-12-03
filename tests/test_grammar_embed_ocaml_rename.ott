@@ -1,0 +1,10 @@
+metavar typevar, X ::= {{ coq nat }} {{ ocaml int }}
+
+grammar
+
+Term :: 't_' ::=
+  | foo X        ::  :: foo
+embed {{ ocaml
+
+let attached_embed x = [[foo X]]
+}}

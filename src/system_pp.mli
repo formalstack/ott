@@ -34,7 +34,6 @@
 (* val pp_systemdefn : *)
 (*  Types.pp_mode -> Types.systemdefn -> Types.made_parser -> string *)
 val pp_systemdefn_core_io :
-  Types.pp_mode -> Types.systemdefn -> Types.made_parser -> (string * (string list)) list -> bool -> unit
+  Types.pp_mode -> Types.systemdefn -> Types.syntaxdefn -> Types.made_parser -> (string * (string list)) list -> bool -> unit
 val pp_systemdefn_core_tex :
   Types.pp_mode -> Types.systemdefn -> Types.made_parser -> (string * (string list)) list -> unit
-

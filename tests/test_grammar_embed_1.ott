@@ -1,0 +1,13 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+term, t :: 't_' ::=
+  | x            ::  :: var
+
+embed {{ coq
+
+Definition expr_ty := term. }}
+
+expr, e :: 'e_' ::= {{ coq expr_ty }}
+  | t            ::  :: term {{ coq [[t]] }}

@@ -1,0 +1,14 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+term, t :: 't_' ::=
+  | leaf x       ::  :: leaf
+  | box e        ::  :: expr
+embed {{ coq
+
+Definition grouped_expr_id (e : expr) := e.
+}}
+expr, e :: 'e_' ::=
+  | bare x       ::  :: var
+  | unbox t      ::  :: term
