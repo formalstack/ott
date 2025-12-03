@@ -143,6 +143,7 @@ let aux_rule (rr:raw_rule) ((before :string list),(after : string list), (l :loc
     raw_rule_pn_wrapper = "";
     raw_rule_ps = [aux_prod];
     raw_rule_homs = List.filter (function (hn,_,_) ->  hn="auxparam") rr.raw_rule_homs;
+    raw_rule_embeds = [];
     raw_rule_categories = ["aux"];
     raw_rule_loc = l }
 
@@ -192,59 +193,70 @@ let auxify_rules (ri :raw_item) : raw_item =
 
 (* auxiliaries ************************************************************* *)
 
-(* TODO: this old-style concat and merge code should (for tidyness) be
-rewritten over the new (raw_item) raw type *)
+type raw_fragments =
+  { mds : raw_metavardefn list;
+    rs : raw_rule list;
+    dcs : raw_fun_or_reln_defnclass list;
+    srs : raw_subrule list;
+    crs : raw_contextrule list;
+    sbs : raw_subst list;
+    fvs : raw_freevar list;
+    embeds : raw_embed list;
+    pas : raw_parsing_annotations list;
+    hss : raw_hom_section list }
 
-let rsd_of_ri ri = match ri with
-| Raw_item_md raw_md ->        { empty_raw_sd with raw_sd_mds=[raw_md] }
-| Raw_item_rs raw_rs ->        { empty_raw_sd with raw_sd_rs=raw_rs }
-| Raw_item_dcs raw_dcs ->      { empty_raw_sd with raw_sd_dcs=[raw_dcs] }
-| Raw_item_srs raw_srs ->      { empty_raw_sd with raw_sd_srs=raw_srs }
-| Raw_item_crs raw_crs ->      { empty_raw_sd with raw_sd_crs=raw_crs }
-| Raw_item_sbs raw_sbs ->      { empty_raw_sd with raw_sd_sbs=raw_sbs }
-| Raw_item_fvs raw_fvs ->      { empty_raw_sd with raw_sd_fvs=raw_fvs }
-| Raw_item_embed raw_embeds -> { empty_raw_sd with raw_sd_embed=raw_embeds }
-| Raw_item_pas raw_pas ->      { empty_raw_sd with raw_sd_pas=raw_pas }
-| Raw_item_hs raw_hs ->        { empty_raw_sd with raw_sd_hss=[raw_hs] }
-| Raw_item_coq_section raw_qs  -> empty_raw_sd   (* no rep for this in old type *)
-| Raw_item_coq_variable raw_qv  -> empty_raw_sd   (* no rep for this in old type *)
+let empty_raw_fragments =
+  { mds = [];
+    rs = [];
+    dcs = [];
+    srs = [];
+    crs = [];
+    sbs = [];
+    fvs = [];
+    embeds = [];
+    pas = [];
+    hss = [] }
 
-let append_rsd rsd rsd' =
-  { raw_sd_mds = rsd.raw_sd_mds @ rsd'.raw_sd_mds;
-    raw_sd_rs  = rsd.raw_sd_rs  @ rsd'.raw_sd_rs;
-    raw_sd_dcs = rsd.raw_sd_dcs @ rsd'.raw_sd_dcs;
-    raw_sd_srs = rsd.raw_sd_srs @ rsd'.raw_sd_srs;
-    raw_sd_crs = rsd.raw_sd_crs @ rsd'.raw_sd_crs;
-    raw_sd_sbs = rsd.raw_sd_sbs @ rsd'.raw_sd_sbs;
-    raw_sd_fvs = rsd.raw_sd_fvs @ rsd'.raw_sd_fvs;
-    raw_sd_embed = rsd.raw_sd_embed @ rsd'.raw_sd_embed;
-    raw_sd_hss = rsd.raw_sd_hss @ rsd'.raw_sd_hss;
-    raw_sd_pas = rsd.raw_sd_pas @ rsd'.raw_sd_pas;
-    raw_sd_loc = dummy_loc }
+let add_raw_item fragments = function
+  | Raw_item_md raw_md -> { fragments with mds = raw_md :: fragments.mds }
+  | Raw_item_rs raw_rs -> { fragments with rs = List.rev_append raw_rs fragments.rs }
+  | Raw_item_dcs raw_dcs -> { fragments with dcs = raw_dcs :: fragments.dcs }
+  | Raw_item_srs raw_srs -> { fragments with srs = List.rev_append raw_srs fragments.srs }
+  | Raw_item_crs raw_crs -> { fragments with crs = List.rev_append raw_crs fragments.crs }
+  | Raw_item_sbs raw_sbs -> { fragments with sbs = List.rev_append raw_sbs fragments.sbs }
+  | Raw_item_fvs raw_fvs -> { fragments with fvs = List.rev_append raw_fvs fragments.fvs }
+  | Raw_item_embed raw_embeds -> { fragments with embeds = List.rev_append raw_embeds fragments.embeds }
+  | Raw_item_pas raw_pas -> { fragments with pas = List.rev_append raw_pas fragments.pas }
+  | Raw_item_hs raw_hs -> { fragments with hss = raw_hs :: fragments.hss }
+  | Raw_item_coq_section _ | Raw_item_coq_variable _ -> fragments
 
-(* let rec rsds_of_ris ris = match ris with *)
-(* | [] -> empty_raw_sd *)
-(* | ri::ris' -> append_rsd (rsd_of_ri ri) (rsds_of_ris ris') *)
+let finish_raw_fragments fragments =
+  { mds = List.rev fragments.mds;
+    rs = List.rev fragments.rs;
+    dcs = List.rev fragments.dcs;
+    srs = List.rev fragments.srs;
+    crs = List.rev fragments.crs;
+    sbs = List.rev fragments.sbs;
+    fvs = List.rev fragments.fvs;
+    embeds = List.rev fragments.embeds;
+    pas = List.rev fragments.pas;
+    hss = List.rev fragments.hss }
 
-let rec concat_language_fragments_per_file (rsds:raw_syntaxdefn list) : raw_syntaxdefn =
-  match rsds with
-  | [] ->
-      empty_raw_sd
-  | rsd0::rsds' ->
-      let rsd_c = concat_language_fragments_per_file  rsds' in
-      append_rsd rsd0 rsd_c
+let fold_raw_items items =
+  finish_raw_fragments
+    (List.fold_left add_raw_item empty_raw_fragments items)
 
-
-let rec concat_language_fragments (rsds:raw_syntaxdefn list) : raw_syntaxdefn =
-  match rsds with
-  | [] ->
-      empty_raw_sd
-  | rsd0::rsds' ->
-      let rsd_c = concat_language_fragments rsds' in
-      append_rsd rsd0 rsd_c
-
-(* let concat_language_fragments_per_file (after_some_defn:bool) (rsds:raw_syntaxdefn list) : raw_syntaxdefn = raise WorkInProgress *)
-(* let concat_language_fragments (rsds:raw_syntaxdefn list) : raw_syntaxdefn = raise WorkInProgress *)
+let pp_raw_fragments fragments =
+  String.concat "" (List.map Grammar_pp.pp_raw_item (List.map (fun md -> Raw_item_md md) fragments.mds))
+  ^ (match fragments.rs with [] -> "" | rs -> Grammar_pp.pp_raw_item (Raw_item_rs rs))
+  ^ String.concat "" (List.map (fun dcs -> Grammar_pp.pp_raw_item (Raw_item_dcs dcs)) fragments.dcs)
+  ^ (match fragments.srs with [] -> "" | srs -> Grammar_pp.pp_raw_item (Raw_item_srs srs))
+  ^ (match fragments.crs with [] -> "" | crs -> Grammar_pp.pp_raw_item (Raw_item_crs crs))
+  ^ (match fragments.sbs with [] -> "" | sbs -> Grammar_pp.pp_raw_item (Raw_item_sbs sbs))
+  ^ (match fragments.fvs with [] -> "" | fvs -> Grammar_pp.pp_raw_item (Raw_item_fvs fvs))
+  ^ (match fragments.embeds with [] -> "" | embeds -> Grammar_pp.pp_raw_item (Raw_item_embed embeds))
+  ^ (match fragments.pas with [] -> "" | pas -> Grammar_pp.pp_raw_item (Raw_item_pas pas))
+  ^ String.concat "" (List.map (fun hs -> Grammar_pp.pp_raw_item (Raw_item_hs hs)) fragments.hss)
 
 
 (* first-draft code to merge language fragments *)
@@ -273,21 +285,18 @@ let collect = (* : ('a -> 'key) -> 'a list -> 'a list list = *)
 (* to merge the structure informations properly, we need to return
 informations about which rules have been merged *)
 
-let merge_raw_rules (rrs:raw_rule list) : raw_rule list * (nontermroot*loc*nontermroot*loc) list =  
-  let merged = ref [] in
+let merge_raw_rules (rrs:raw_rule list) : raw_rule list =
   let collected_rules = collect (function rr -> rr.raw_rule_ntr_name) rrs in
   let append_raw_rule (rr:raw_rule) (rr':raw_rule) : raw_rule =
-    merged := (rr.raw_rule_ntr_name,rr.raw_rule_loc, rr'.raw_rule_ntr_name,rr'.raw_rule_loc)::!merged;
-    { rr with raw_rule_ps = rr.raw_rule_ps @ rr'.raw_rule_ps } in
-  let rec f rrs = match rrs with
-  | [] -> Auxl.int_error "merge_raw_rules"
-  | [rr] -> rr
-  | rr::rr'::rrs -> append_raw_rule rr (f (rr'::rrs)) in
-  let mapped = List.map f collected_rules in
-  (* print_endline "*** merged infos"; *)
-  (* print_endline (String.concat "\n" (List.map (fun (x,xl,y,yl) -> x^":"^(Location.pp_loc xl)^"\n    "^y^":"^(Location.pp_loc yl)) !merged)); *)
-  (* print_endline "*** end merged infos"; *)
-  (mapped,!merged)
+    { rr with
+      raw_rule_ps = rr.raw_rule_ps @ rr'.raw_rule_ps;
+      raw_rule_embeds = rr.raw_rule_embeds @ rr'.raw_rule_embeds } in
+  let rec merge = function
+    | [] -> Auxl.int_error "merge_raw_rules"
+    | [rr] -> rr
+    | rr::rrs -> append_raw_rule rr (merge rrs)
+  in
+  List.map merge collected_rules
 
 let merge_raw_defns (rds:raw_defn list) : raw_defn list =
   let collected_defns = collect (function rd->rd.raw_d_name) rds in
@@ -334,12 +343,29 @@ let merge_raw_fun_or_reln_defnclasses (rfrdcs:raw_fun_or_reln_defnclass list) : 
 
 
 
-let merge_language_fragments (rsd:raw_syntaxdefn) : raw_syntaxdefn =
-  let (merged_raw_rules,_) = merge_raw_rules rsd.raw_sd_rs in (* FZ tasteless *)
-  { rsd with 
-    raw_sd_rs = merged_raw_rules;
-    raw_sd_dcs = merge_raw_fun_or_reln_defnclasses rsd.raw_sd_dcs
+let merge_fragment_contents fragments =
+  { fragments with
+    rs = merge_raw_rules fragments.rs;
+    dcs = merge_raw_fun_or_reln_defnclasses fragments.dcs
   }
+
+let make_raw_rule ?ntr_names ?(pn_wrapper="") ?(ps=[]) ?(homs=[]) ?(categories=[]) ?(loc=dummy_loc) raw_rule_ntr_name =
+  let raw_rule_ntr_names =
+    match ntr_names with
+    | Some raw_rule_ntr_names -> raw_rule_ntr_names
+    | None -> [raw_rule_ntr_name,[]]
+  in
+  { raw_rule_ntr_name;
+    raw_rule_ntr_names;
+    raw_rule_pn_wrapper = pn_wrapper;
+    raw_rule_ps = ps;
+    raw_rule_homs = homs;
+    raw_rule_embeds = [];
+    raw_rule_categories = categories;
+    raw_rule_loc = loc }
+
+let rule_has_visible_output r =
+  not (r.rule_semi_meta && r.rule_embeds = [])
 
 
 (* check that for each pair in the Subrule part of srs that there is
@@ -1455,23 +1481,16 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
 
   debug_ris_per_file "after quotient and aux"  ris_per_file;
 
-  (* rebuild old raw type (rsds) from new raw type (ris) *)
-  let (rsd_per_file:raw_syntaxdefn list list) = List.map (List.map rsd_of_ri) ris_per_file in
-
-  (* TODO: for tidyiness, the following code should be rewritten to
-  use ris directly rather than via the old-type stuff involving rsds;
-  then we can remove the above line *)
-
   let show_inferred_auxfn_typing = false in
   let show_subrule_data = false in
 
   (* 1- collect together the metavariable, grammar and definition items *)
 
-  let rsd_per_file_2 = (List.map (fun rsd_part -> concat_language_fragments_per_file rsd_part) rsd_per_file) in
+  let fragments = fold_raw_items (List.concat ris_per_file) in
 
-  let rsd = concat_language_fragments rsd_per_file_2 in
-
-  let rsd = if merge_fragments then merge_language_fragments rsd else rsd in
+  let fragments =
+    if merge_fragments then merge_fragment_contents fragments else fragments
+  in
 
   (* 2- synthesise additional grammar items from the definitions for 
         the syntax of judgements *)
@@ -1486,13 +1505,13 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_prod_loc = d.raw_d_loc } in
 
   let lang_rule_of_defnclass (dc:raw_defnclass) : raw_rule =
-    { raw_rule_ntr_name = dc.raw_dc_name;
-      raw_rule_ntr_names = [dc.raw_dc_name,[]];
-      raw_rule_pn_wrapper = dc.raw_dc_wrapper;
-      raw_rule_ps = List.map sd_prod_of_defn dc.raw_dc_defns;
-      raw_rule_homs = [];
-      raw_rule_categories = ["defnclass"];
-      raw_rule_loc = dc.raw_dc_loc } in
+    make_raw_rule
+      ~pn_wrapper:dc.raw_dc_wrapper
+      ~ps:(List.map sd_prod_of_defn dc.raw_dc_defns)
+      ~categories:["defnclass"]
+      ~loc:dc.raw_dc_loc
+      dc.raw_dc_name
+  in
 
   let defn_sd_prod_of_fundefn (fd:raw_fundefn) : raw_prod =
     { raw_prod_name = fd.raw_fd_name;
@@ -1504,20 +1523,23 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_prod_loc = fd.raw_fd_loc } in
 
   let defn_lang_rule_of_fundefnclass (fdc:raw_fundefnclass) : raw_rule =
-    { raw_rule_ntr_name = fdc.raw_fdc_name;
-      raw_rule_ntr_names = [fdc.raw_fdc_name,[]];
-      raw_rule_pn_wrapper = "fundefn_";
-      raw_rule_ps = List.map defn_sd_prod_of_fundefn fdc.raw_fdc_fundefns;
-      raw_rule_homs = [];
-      raw_rule_categories = ["fundefnclass"];
-      raw_rule_loc = fdc.raw_fdc_loc } in
+    make_raw_rule
+      ~pn_wrapper:"fundefn_"
+      ~ps:(List.map defn_sd_prod_of_fundefn fdc.raw_fdc_fundefns)
+      ~categories:["fundefnclass"]
+      ~loc:fdc.raw_fdc_loc
+      fdc.raw_fdc_name
+  in
 
   let lang_rule_of_fun_or_reln_defnclass (frdc:raw_fun_or_reln_defnclass) : raw_rule =
     match frdc with
     | Raw_FDC fdc -> defn_lang_rule_of_fundefnclass fdc
     | Raw_RDC dc -> lang_rule_of_defnclass dc in
 
-  let add_extra_lang_rules rsd = { rsd with raw_sd_rs = rsd.raw_sd_rs @ List.map lang_rule_of_fun_or_reln_defnclass rsd.raw_sd_dcs } in
+  let add_extra_lang_rules fragments =
+    { fragments with
+      rs = fragments.rs @ List.map lang_rule_of_fun_or_reln_defnclass fragments.dcs }
+  in
 
   let judgement_nontermroots = 
 (*(*    List.flatten (List.map (fun r -> List.map fst r.raw_rule_ntr_names) extra_lang_rules) in*)*)
@@ -1526,7 +1548,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       match frdc with
       | Raw_FDC fdc -> None
       | Raw_RDC dc -> Some dc.raw_dc_name)
-      rsd.raw_sd_dcs in
+      fragments.dcs in
 
 
 
@@ -1566,7 +1588,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_prod_bs = [];
       raw_prod_loc = fd.raw_fd_loc } in
 
-  let add_extra_lang_usage_prods rsd =
+  let add_extra_lang_usage_prods fragments =
     let rec extra_lang_usage_prods (rs:raw_rule list) (frdcs:raw_fun_or_reln_defnclass list)  : raw_fun_or_reln_defnclass list * (nontermroot * raw_prod) list =
       match frdcs with
       | [] -> [],[]
@@ -1590,14 +1612,14 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
                        in
                        (r.raw_rule_ntr_name, usage_sd_prod_of_fundefn fd),
                        {fd with
-                        raw_fd_result_type=r.raw_rule_ntr_name;
+                       raw_fd_result_type=r.raw_rule_ntr_name;
                         raw_fd_pn_wrapper=r.raw_rule_pn_wrapper }
                      )
                      fdc.raw_fdc_fundefns) in
               Raw_FDC {fdc with raw_fdc_fundefns = fds'} :: frdcs'', extra_prods'@extra_prods in
     
     
-    let frdcs',extra_prods = extra_lang_usage_prods rsd.raw_sd_rs rsd.raw_sd_dcs in
+    let frdcs',extra_prods = extra_lang_usage_prods fragments.rs fragments.dcs in
 
     let rs' = 
       List.map
@@ -1605,9 +1627,9 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
           let extra_prods = Auxl.option_map (fun (ntr,rp)->if ntr=r.raw_rule_ntr_name then Some rp else None) extra_prods in
           {r with raw_rule_ps = r.raw_rule_ps @ extra_prods }
         )
-        rsd.raw_sd_rs in
+        fragments.rs in
   
-    { rsd with raw_sd_rs=rs'; raw_sd_dcs=frdcs' } in
+    { fragments with rs = rs'; dcs = frdcs' } in
 
     
 (*     let extra_lang_usage_prods  : (nontermroot * raw_prod) list =  *)
@@ -1649,22 +1671,20 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
     
     if List.exists
 	(fun r -> (String.compare r.raw_rule_ntr_name "formula") = 0) 
-	rsd.raw_sd_rs
+	fragments.rs
     then []
     else
-      [ { raw_rule_ntr_name = "formula";
-	  raw_rule_ntr_names = ["formula",[]];
-	  raw_rule_pn_wrapper = "formula_";
-	  raw_rule_ps = [ { raw_prod_name = "judgement";
-			    raw_prod_flavour = Bar;
-			    raw_prod_categories = [];
-			    raw_prod_es = [Raw_ident (dummy_loc,(dummy_loc,"judgement"))];
-			    raw_prod_homs = [];
-			    raw_prod_bs = [];
-			    raw_prod_loc = dummy_loc } ];
-	raw_rule_homs = [];
-	raw_rule_categories = ["formula"];
-	raw_rule_loc = dummy_loc } ] in
+      [ make_raw_rule
+          ~pn_wrapper:"formula_"
+          ~ps:[ { raw_prod_name = "judgement";
+                  raw_prod_flavour = Bar;
+                  raw_prod_categories = [];
+                  raw_prod_es = [Raw_ident (dummy_loc,(dummy_loc,"judgement"))];
+                  raw_prod_homs = [];
+                  raw_prod_bs = [];
+                  raw_prod_loc = dummy_loc } ]
+          ~categories:["formula"]
+          "formula" ] in
    
   (* 3b- synthesise a grammar of all judgements *)
 
@@ -1678,47 +1698,44 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_prod_loc = dummy_loc } in
 
   let judgement : raw_rule =
-    { raw_rule_ntr_name = "judgement";
-      raw_rule_ntr_names = ["judgement",[]; (*"J",[]*)];
-      raw_rule_pn_wrapper = "judgement_";
-      raw_rule_ps = List.map prod_of_root judgement_nontermroots;
-      raw_rule_homs = [];
-      raw_rule_categories = ["judgement"];
-      raw_rule_loc = dummy_loc } in
+    make_raw_rule
+      ~ntr_names:["judgement",[]; (*"J",[]*)]
+      ~pn_wrapper:"judgement_"
+      ~ps:(List.map prod_of_root judgement_nontermroots)
+      ~categories:["judgement"]
+      "judgement"
+  in
 
   (* 3c- synthesise a grammar of all user syntax *)
 
   let user_syntax_nontermroots = 
-(*    List.flatten (List.map (fun r -> List.map fst r.raw_rule_ntr_names) rsd.raw_sd_rs) in *)
-    (List.map (fun r -> r.raw_rule_ntr_name) rsd.raw_sd_rs) in
+(*    List.flatten (List.map (fun r -> List.map fst r.raw_rule_ntr_names) fragments.rs) in *)
+    (List.map (fun r -> r.raw_rule_ntr_name) fragments.rs) in
 
   let user_syntax_metavarroots = 
-(*    List.flatten (List.map (fun md -> List.map fst md.raw_mvd_names) rsd.raw_sd_mds) in*)
-    (List.map (fun md -> md.raw_mvd_name) rsd.raw_sd_mds) in
+(*    List.flatten (List.map (fun md -> List.map fst md.raw_mvd_names) fragments.mds) in*)
+    (List.map (fun md -> md.raw_mvd_name) fragments.mds) in
 
   let user_syntax : raw_rule =
-    { raw_rule_ntr_name = "user_syntax";
-      raw_rule_ntr_names = ["user_syntax",[]];
-      raw_rule_pn_wrapper = "user_syntax__";
-      raw_rule_ps = List.map prod_of_root (user_syntax_metavarroots @ user_syntax_nontermroots);
-      raw_rule_homs = [];
-      raw_rule_categories = ["user_syntax"];
-      raw_rule_loc = dummy_loc } in
+    make_raw_rule
+      ~pn_wrapper:"user_syntax__"
+      ~ps:(List.map prod_of_root (user_syntax_metavarroots @ user_syntax_nontermroots))
+      ~categories:["user_syntax"]
+      "user_syntax"
+  in
   
-  let rsd' =      
-    { rsd with    
-      raw_sd_rs = rsd.raw_sd_rs@formula } in   
+  let fragments = { fragments with rs = fragments.rs @ formula } in
 
-  let rsd' = add_extra_lang_usage_prods rsd' in
+  let fragments = add_extra_lang_usage_prods fragments in
 
-  let rsd' = add_extra_lang_rules rsd' in
+  let fragments = add_extra_lang_rules fragments in
 
-  let rsd' =      
-    { rsd' with    
-      raw_sd_rs = rsd'.raw_sd_rs @ [judgement] @ [user_syntax] } in   
+  let fragments =
+    { fragments with rs = fragments.rs @ [judgement] @ [user_syntax] }
+  in
 
   debug ( "\nSynthesised raw language:\n"
-	  ^  Grammar_pp.pp_raw_syntaxdef rsd'^"\n\n" );
+	  ^  pp_raw_fragments fragments ^"\n\n" );
 
   (* 3d- append the homs from any extra hom sections onto the relevant *)
   (* productions and definitions *)
@@ -1731,7 +1748,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
              (rhs.raw_hs_wrapper^rhsi.raw_hsi_name,
               (rhsi.raw_hsi_bs,rhsi.raw_hsi_homs))) 
              rhs.raw_hs_hsis)
-         rsd'.raw_sd_hss) in
+         fragments.hss) in
 
   let rec fst_map f (xs,y) = (* (f:'a * 'b -> 'a * 'b) ((xs,y):'a list * 'b) : 'a list * 'b = *)
     match xs with 
@@ -1811,14 +1828,15 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   let append_homs_fun_or_reln_defnclasss =
     fst_map append_homs_fun_or_reln_defnclass in
 
-  let (raw_sd_rs',rehs') = append_homs_rules (rsd'.raw_sd_rs, collected_extra_homs) in
+  let (raw_rs',rehs') = append_homs_rules (fragments.rs, collected_extra_homs) in
 
-  let (raw_sd_dcs',rehs'') = append_homs_fun_or_reln_defnclasss (rsd'.raw_sd_dcs, rehs') in
+  let (raw_dcs',rehs'') = append_homs_fun_or_reln_defnclasss (fragments.dcs, rehs') in
 
   if rehs'' <> [] then failwith ("hom section contains items for nonexistent production or defn names: "^String.concat ", " (List.map fst rehs'')) (* TODO add location data to that error *);
 
-  let rsd' =       
-    { rsd' with raw_sd_rs = raw_sd_rs'; raw_sd_dcs=raw_sd_dcs' } in   
+  let fragments =
+    { fragments with rs = raw_rs'; dcs = raw_dcs' }
+  in
 
 
 
@@ -1839,7 +1857,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   
   (* make an association list of metavar roots - primary to the synonyms *)
   let mvrs_assoc : (metavarroot * metavarroot list) list =
-    List.map (fun md -> md.raw_mvd_name, (List.map fst md.raw_mvd_names)) rsd'.raw_sd_mds in
+    List.map (fun md -> md.raw_mvd_name, (List.map fst md.raw_mvd_names)) fragments.mds in
   (* and one in the other direction *)
   let mvrs_assoc_op : (metavarroot * metavarroot) list =
     List.concat 
@@ -1853,21 +1871,21 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
 (*  let mvrs_all = 
     List.sort 
       (fun a -> fun b -> compare b a) 
-      (List.concat (List.map (fun md -> (List.map fst md.raw_mvd_names)) rsd'.raw_sd_mds)) in *)
+      (List.concat (List.map (fun md -> (List.map fst md.raw_mvd_names)) fragments.mds)) in *)
   let mvrs_nonindex = 
     List.sort 
       (fun a -> fun b -> compare b a) 
       (List.concat 
          (List.map 
             (fun md -> (List.map fst md.raw_mvd_names)) 
-            (List.filter (function md->not md.raw_mvd_indexvar) rsd'.raw_sd_mds))) in
+            (List.filter (function md->not md.raw_mvd_indexvar) fragments.mds))) in
   let mvrs_index = 
     List.sort 
       (fun a -> fun b -> compare b a) 
       (List.concat 
          (List.map 
             (fun md -> (List.map fst md.raw_mvd_names)) 
-            (List.filter (function md->md.raw_mvd_indexvar) rsd'.raw_sd_mds))) in
+            (List.filter (function md->md.raw_mvd_indexvar) fragments.mds))) in
   
   (* 5- collect together all the primary nonterminal roots *)
 
@@ -1875,7 +1893,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   let ntrs_assoc : (nontermroot * nontermroot list) list =
     List.map 
       (fun rr -> rr.raw_rule_ntr_name, (List.map fst rr.raw_rule_ntr_names)) 
-      rsd'.raw_sd_rs in
+      fragments.rs in
   (* and one in the other direction *)
   let ntrs_assoc_op : (nontermroot * nontermroot) list =
     List.concat 
@@ -1889,14 +1907,14 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       (function a -> function b -> compare b a) 
       (List.concat (List.map 
 		      (fun rr -> (List.map fst rr.raw_rule_ntr_names)) 
-		      rsd'.raw_sd_rs)) in
+		      fragments.rs)) in
   (* collect together all the nontermroots, primaried, that occur on the left of a <::  *)
   let wrapped_primary_ntr_of_ntr rsr ntr = try
     primary_ntr_of_ntr ntr 
   with
   | Not_found -> ty_error2 rsr.raw_sr_loc ("\""^ntr^"\" in subrule declaration is not a nonterminal root ") "" in
-  let srs_lowers = List.map (fun sr -> (wrapped_primary_ntr_of_ntr sr sr.raw_sr_lower)) rsd'.raw_sd_srs in
-(*  let srs_uppers = List.map (fun sr -> (wrapped_primary_ntr_of_ntr sr.raw_sr_upper)) rsd'.raw_sd_srs in *)
+  let srs_lowers = List.map (fun sr -> (wrapped_primary_ntr_of_ntr sr sr.raw_sr_lower)) fragments.srs in
+(*  let srs_uppers = List.map (fun sr -> (wrapped_primary_ntr_of_ntr sr.raw_sr_upper)) fragments.srs in *)
   
   (* 6- make a preliminary ident_lexer that doesn't know about any terminals *)
 
@@ -1964,6 +1982,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       rule_pn_wrapper = r.raw_rule_pn_wrapper;
       rule_ps = List.map (cd_prod c r.raw_rule_ntr_name r.raw_rule_pn_wrapper targets rule_homs_for_targets) r.raw_rule_ps;
       rule_homs = rule_homs;
+      rule_embeds = cd_embeds c r.raw_rule_embeds;
       rule_meta = 
       ( rule_semi_meta
       || List.mem r.raw_rule_ntr_name srs_lowers
@@ -1975,22 +1994,32 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
 
   (* 9- build a preliminary syntax defn, without dependencies or auxfns *)
 
-  (* embed preamble are those embeds labeled by ___-preamble *)
-  let raw_embed_preamble = 
-    Auxl.option_map
-      (fun (l,hn,he) ->
-         match hn with
-         | "tex-preamble"   -> Some (l,"tex",he)
-         | "tex-wrap-pre"
-         | "tex-wrap-post"  -> Some (l,hn,he)
-         | "coq-preamble"   -> Some (l,"rocq",he)
-         | "rocq-preamble"  -> Some (l,"rocq",he)
-         | "isa-preamble"   -> Some (l,"isa",he)
-         | "hol-preamble"   -> Some (l,"hol",he)
-         | "lem-preamble"   -> Some (l,"lem",he)
-         | "ocaml-preamble" -> Some (l,"ocaml",he)
-         | _                -> None)
-      rsd'.raw_sd_embed in
+  let raw_embed_preamble, raw_embed_whole_file, raw_structure_embeds =
+    let embed_preamble_target = function
+      | "tex-preamble" -> Some "tex"
+      | ("tex-wrap-pre" | "tex-wrap-post") as hn -> Some hn
+      | "coq-preamble" | "rocq-preamble" -> Some "rocq"
+      | "isa-preamble" -> Some "isa"
+      | "hol-preamble" -> Some "hol"
+      | "lem-preamble" -> Some "lem"
+      | "ocaml-preamble" -> Some "ocaml"
+      | _ -> None
+    in
+    let embed_is_whole_file = function
+      | "coq-lib" | "rocq-lib" | "isa-lib" | "isa-import" -> true
+      | _ -> false
+    in
+    List.fold_right
+      (fun ((l,hn,he) as embed) (preamble, whole_file, structure) ->
+         match embed_preamble_target hn with
+         | Some target -> ((l,target,he) :: preamble, whole_file, structure)
+         | None when embed_is_whole_file hn ->
+             (preamble, embed :: whole_file, structure)
+         | None ->
+             (preamble, whole_file, embed :: structure))
+      fragments.embeds
+      ([], [], [])
+  in
 
   (* calculate additional file names that the Isabelle header should include (isa-import) *)
   let raw_isa_imports = 
@@ -2003,11 +2032,11 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
            match hn with
            | "isa-import" -> List.fold_left get_string r he
            | _            -> r) 
-        [] rsd'.raw_sd_embed) in
+        [] raw_embed_whole_file) in
    
   let xd =
-    let srs,srd = cd_subrules c rsd'.raw_sd_srs in
-    let rs = List.map (cd_rule c) rsd'.raw_sd_rs in
+    let srs,srd = cd_subrules c fragments.srs in
+    let rs = List.map (cd_rule c) fragments.rs in
     let all_prod_names = List.flatten (List.map (fun r -> List.map (fun p->p.prod_name) r.rule_ps) rs) in
     { xd_mds = List.map 
 	(fun (mvd:raw_metavardefn) -> 
@@ -2028,19 +2057,19 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
 	      else (try let _ = List.assoc "phantom" mvd_rep in true with Not_found -> false);
 	    mvd_loc = mvd.raw_mvd_loc;
           } ) 
-	rsd'.raw_sd_mds;
+	fragments.mds;
       xd_rs = rs;
       xd_dep = List.map (fun x -> (x,empty_dependencies)) ("ascii"::targets);
       xd_srs = srs;
       xd_srd = srd;
-      xd_crs = List.map (cd_contextrule c) rsd'.raw_sd_crs;
+      xd_crs = List.map (cd_contextrule c) fragments.crs;
       xd_axs = [];  (* this is overridden by something more sensible below *)
-      xd_sbs = List.map (cd_subst c srs) rsd'.raw_sd_sbs;
-      xd_fvs = List.map (cd_freevar c srs) rsd'.raw_sd_fvs;
+      xd_sbs = List.map (cd_subst c srs) fragments.sbs;
+      xd_fvs = List.map (cd_freevar c srs) fragments.fvs;
       xd_embed_preamble = cd_embeds c raw_embed_preamble;
-      xd_embed = cd_embeds c rsd'.raw_sd_embed;
+      xd_embed = cd_embeds c raw_embed_whole_file;
       xd_isa_imports = raw_isa_imports;
-      xd_pas = cd_parsing_annotations all_prod_names rsd'.raw_sd_pas;
+      xd_pas = cd_parsing_annotations all_prod_names fragments.pas;
     } in
 
   (*  - pull the names of defined auxiliary functions, paired with the *)
@@ -2681,7 +2710,10 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       xd.xd_mds in
   let structure_rs =
     Auxl.option_map
-      (fun r -> if r.rule_semi_meta then None else Some (r.rule_loc, (Struct_rs [r.rule_ntr_name])))
+      (fun r ->
+         if not (rule_has_visible_output r)
+         then None
+         else Some (r.rule_loc, (Struct_rs [r.rule_ntr_name])))
       xd.xd_rs in
   let structure_srs = 
     let candidate = 
@@ -2722,8 +2754,9 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       (fun fv -> (fv.fv_loc, (Struct_fvs [(fv.fv_name, fv.fv_this, fv.fv_that)])))
       xd.xd_fvs in
   let structure_embed = 
-    let all_embeds = xd.xd_embed_preamble @ xd.xd_embed in
-    List.map (fun (l,m,e) -> (l,Struct_embed (l,m,e))) all_embeds  (* FZ this duplicates a lot of informations...  FIXME *)
+    List.map
+      (fun (l,m,e) -> (l,Struct_embed (l,m,e)))
+      (cd_embeds c raw_structure_embeds)
   in
   let structure_dcs =
     List.map
@@ -2731,7 +2764,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
         match dc with
         | Raw_FDC fdc -> (fdc.raw_fdc_loc, Struct_fun_or_defnclass fdc.raw_fdc_name)
         | Raw_RDC rdc -> (rdc.raw_dc_loc, Struct_fun_or_defnclass rdc.raw_dc_name))
-      raw_sd_dcs' in
+      fragments.dcs in
 
   let unsorted_structure =
     structure_mds 
@@ -2867,7 +2900,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   if not(merge_fragments) then check_structure xd structure;
 
   (* 14- the answer *)
-  (xd, structure, rsd'.raw_sd_dcs)
+  (xd, structure, fragments.dcs)
 
 
 let check_with_parser (lookup : made_parser) (xd: syntaxdefn) : unit =
@@ -2892,4 +2925,3 @@ let check_with_parser (lookup : made_parser) (xd: syntaxdefn) : unit =
   in         
   (* for each rule, test all productions *)
   List.iter (fun cr -> ctxrule cr.cr_hole cr.cr_ntr cr.cr_target) xd.xd_crs; 
-

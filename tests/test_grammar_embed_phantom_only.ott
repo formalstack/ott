@@ -1,0 +1,29 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+term, t :: 't_' ::=
+  | x                     ::   :: var
+
+terminals :: 'terminals_' ::=
+  | phantom_only          ::   :: phantom_only
+
+formula :: formula_ ::=
+  | judgement             ::   :: judgement
+  | phantom_only          ::   :: phantom_only
+    {{ coq phantom_only }}
+
+embed {{ coq
+
+Definition phantom_only : Prop := True.
+}}
+
+defns
+  Goodness :: '' ::=
+
+defn
+  |- t ::  :: Ok :: Ok  by
+
+  phantom_only
+  ----------- :: E
+  |- t

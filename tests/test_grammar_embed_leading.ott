@@ -1,0 +1,11 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+embed {{ coq
+
+Definition leading_ty := nat.
+}}
+
+term, t :: 't_' ::= {{ coq leading_ty }}
+  | x                     ::   :: var

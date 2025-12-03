@@ -1,0 +1,15 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+term, t :: 't_' ::=
+  | x            ::  :: var
+
+%% This exercises a trailing rule embed inside the grammar block.
+embed {{ tex
+
+\texttt{TEX\_INTERLEAVE\_MARKER}
+}}
+
+expr, e :: 'e_' ::=
+  | t            ::  :: term

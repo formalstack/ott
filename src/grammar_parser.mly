@@ -55,6 +55,12 @@ let parse_error s =
   raise (My_parse_error (Some (mkl ()), "Problem parsing: " ^ s 
 	    ))
 
+let make_rules_items prefix rules =
+  match prefix, rules with
+  | [], rules -> [Raw_item_rs rules]
+  | prefix, [] -> [Raw_item_embed prefix]
+  | prefix, rules -> [Raw_item_embed prefix; Raw_item_rs rules]
+
 (* %token EQUAL             *)
 %}
 
@@ -126,6 +132,12 @@ let parse_error s =
 %type <Types.raw_drule_line_annot> drule_line_annot 
 
 %type <Types.raw_item list> main
+%type <Types.raw_item list> item
+%type <Types.raw_item list> rules
+%type <Types.raw_embed list> rules_prefix
+%type <Types.raw_rule list> rule_list
+%type <Types.raw_rule> rule_with_embeds
+%type <Types.raw_embed list> rule_trailing_embeds
 
 %type <Types.embed_spec_el list> unfiltered_spec_el_list
 
@@ -137,27 +149,27 @@ main:
    items    { $1 } 
 
 items: 
-   item items                     { $1 :: $2 }
+   item items                     { $1 @ $2 }
  | EOF                            { [] }
 
 item: 
-   metavardefn                    { $1 }
+   metavardefn                    { [$1] }
  | RULES rules                    { $2 } 
- | DEFNCLASS defnclass            { $2 }  
- | FUNDEFNCLASS fundefnclass      { $2 }  
- | SUBRULES subrules              { $2 }  
- | CONTEXTRULES contextrules      { $2 }
- | SUBSTITUTIONS substitutions    { $2 }  
- | FREEVARS freevars              { $2 }  
- | EMBED embed                    { $2 }	
- | PARSING parsing_annotations    { $2 }	
- | HOMS hom_section               { $2 }
- | COQSECTIONBEGIN coq_section_begin { $2 }
- | COQSECTIONEND coq_section_end     { $2 }
- | COQVARIABLE coq_variable          { $2 }
- | ROCQSECTIONBEGIN coq_section_begin { $2 }
- | ROCQSECTIONEND coq_section_end     { $2 }
- | ROCQVARIABLE coq_variable          { $2 }
+ | DEFNCLASS defnclass            { [$2] }  
+ | FUNDEFNCLASS fundefnclass      { [$2] }  
+ | SUBRULES subrules              { [$2] }  
+ | CONTEXTRULES contextrules      { [$2] }
+ | SUBSTITUTIONS substitutions    { [$2] }  
+ | FREEVARS freevars              { [$2] }  
+ | EMBED embed                    { [$2] }	
+ | PARSING parsing_annotations    { [$2] }	
+ | HOMS hom_section               { [$2] }
+ | COQSECTIONBEGIN coq_section_begin { [$2] }
+ | COQSECTIONEND coq_section_end     { [$2] }
+ | COQVARIABLE coq_variable          { [$2] }
+ | ROCQSECTIONBEGIN coq_section_begin { [$2] }
+ | ROCQSECTIONEND coq_section_end     { [$2] }
+ | ROCQVARIABLE coq_variable          { [$2] }
 
 metavardefn:
    metavardefn_int   
@@ -303,20 +315,33 @@ element_list:
  | element element_list           { $1 :: $2 }
 
 rules:
-   rule_list
-     { Raw_item_rs $1 }
+   rules_prefix rule_list
+     { make_rules_items $1 $2 }
+
+rules_prefix:
+   /* empty */ %prec DUMMY_ABOVE_EMBED { [] }
+ | EMBED embedmorphism_list rules_prefix { $2 @ $3 }
 
 rule_list:
    /* empty */                    { [] }
- | rule rule_list                 { $1 :: $2 }
+ | rule_with_embeds rule_list     { $1 :: $2 }
 
-rule: 
-   ne_ident_hom_desc_list COLONCOLON STRING CCE homomorphism_list prodlist 
+rule_with_embeds:
+   rule rule_trailing_embeds
+     { { $1 with raw_rule_embeds = $1.raw_rule_embeds @ $2 } }
+
+rule_trailing_embeds:
+   /* empty */ %prec DUMMY_ABOVE_EMBED { [] }
+ | EMBED embedmorphism_list rule_trailing_embeds { $2 @ $3 }
+
+ rule: 
+   ne_ident_hom_desc_list COLONCOLON STRING CCE homomorphism_list prodlist
      { { raw_rule_ntr_name  = fst (List.hd($1));
          raw_rule_ntr_names = $1;
          raw_rule_pn_wrapper = (fst $3);
          raw_rule_ps = $6;
 	 raw_rule_homs = $5;
+         raw_rule_embeds = [];
          raw_rule_categories = ["user"];
          raw_rule_loc = mkl() } }
 
@@ -327,7 +352,7 @@ prod:
          raw_prod_categories = $4;
          raw_prod_es = $2;
 	 raw_prod_homs = $8;
-         raw_prod_bs = $7;
+	 raw_prod_bs = $7;
 	 raw_prod_loc = mkl() } }
 
 prodlist:
@@ -604,5 +629,3 @@ unfiltered_inner:
    /* empty */                         { "" }
  | STRING unfiltered_inner             { (fst $1) ^ $2 }
  | BLANKS unfiltered_inner             { $1 ^ $2 }
-
-

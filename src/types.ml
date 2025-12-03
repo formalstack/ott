@@ -231,6 +231,7 @@ and rule =  (* r *)
       rule_pn_wrapper : string;
       rule_ps : prod list;
       rule_homs : homomorphism list;
+      rule_embeds : embed list;
       rule_meta : bool; 
         (* semi_meta OR rule occurs as srs_lower OR phantom *)
       rule_semi_meta : bool; 
@@ -635,6 +636,7 @@ and raw_rule =
       raw_rule_pn_wrapper : string;
       raw_rule_ps : raw_prod list;
       raw_rule_homs : raw_homomorphism list;
+      raw_rule_embeds : raw_embed list;
       raw_rule_categories : string list;
       raw_rule_loc : loc }
 
@@ -705,19 +707,6 @@ and raw_item = (* ri *)
   | Raw_item_hs of raw_hom_section 
   | Raw_item_coq_section of raw_coq_section
   | Raw_item_coq_variable of raw_coq_variable
-   
-and raw_syntaxdefn = 
-    { raw_sd_mds : raw_metavardefn list; 
-      raw_sd_rs : raw_rule list;
-      raw_sd_dcs : raw_fun_or_reln_defnclass list;
-      raw_sd_srs : raw_subrule list;
-      raw_sd_crs : raw_contextrule list;
-      raw_sd_sbs : raw_subst list;
-      raw_sd_fvs : raw_freevar list;
-      raw_sd_embed : raw_embed list;
-      raw_sd_pas : raw_parsing_annotations list;
-      raw_sd_hss : raw_hom_section list;
-      raw_sd_loc : loc }         (* FZ shall we keep loc here? *)
       
 and raw_line = 
   | Raw_line of loc * string
@@ -777,13 +766,6 @@ type raw_drule_line_annot =
     { dla_name : string;
       dla_categories : raw_ident list;
       dla_homs : raw_homomorphism list}
-
-let empty_raw_sd = 
-  { raw_sd_mds = []; raw_sd_rs = []; raw_sd_dcs = []; 
-    raw_sd_srs = []; raw_sd_crs = []; raw_sd_sbs = []; raw_sd_fvs = [];
-    raw_sd_embed = []; raw_sd_hss = [];
-    raw_sd_pas = [];
-    raw_sd_loc = dummy_loc } 
 
 
 

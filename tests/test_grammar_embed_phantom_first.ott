@@ -1,0 +1,14 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+formula :: formula_ ::=
+  | judgement             ::   :: judgement
+
+embed {{ coq
+
+Definition helper_ty := nat.
+}}
+
+term, t :: 't_' ::= {{ coq helper_ty }}
+  | x                     ::   :: var

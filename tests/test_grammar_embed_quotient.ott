@@ -1,0 +1,16 @@
+indexvar x ::= {{coq nat}}
+
+grammar
+
+term, t :: 't_' ::=
+  | x            ::  :: var
+
+expr, e :: 't_' ::= {{ quotient-with t }}
+  | box t        ::  :: lift
+embed {{ coq
+
+Definition quotient_ty := term.
+}}
+
+wrapper :: 'wrapper_' ::= {{ coq quotient_ty }}
+  | t            ::  :: wrapped

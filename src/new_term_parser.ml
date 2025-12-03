@@ -900,10 +900,17 @@ let build_grammar (xd : syntaxdefn)
 
     end; 
 
+    let find_prodname_index2 pn loc =
+      try Hashtbl.find prodname_to_index2 pn with
+      | Not_found ->
+          Auxl.error (Some loc)
+            ("internal error: missing parser production for parsing annotation prodname \""
+             ^ pn ^ "\"")
+    in
     List.iter
       (fun (pn1, annot, pn2, loc) ->
-         let (i1, i1') = Hashtbl.find prodname_to_index2 pn1 in
-         let (i2, i2') = Hashtbl.find prodname_to_index2 pn2 in
+         let (i1, i1') = find_prodname_index2 pn1 loc in
+         let (i2, i2') = find_prodname_index2 pn2 loc in
          let entry = 
            match annot with
                Types.LTEQ -> [Greater (i2, i1); Greater (i2', i1)]

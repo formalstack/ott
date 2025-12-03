@@ -112,13 +112,62 @@ let set_locally_nameless m =
   (* TODO *)
   | _ -> Auxl.error None "locally-nameless: only the Coq backend understand {{ repr-locally-nameless }}.\n"
 
+let apply_rule_embed_side_effects m xd lookup rs =
+  List.iter
+    (fun r ->
+       Embed_pp.apply_embeds_side_effects m xd lookup r.rule_embeds)
+    rs
+
+let embeds_for_input_files input_files embeds =
+  List.filter
+    (fun (l,_,_) -> List.mem (Location.extract_file l) input_files)
+    embeds
+
+let prepare_whole_file_embed_side_effects m xd lookup embed_preamble embeds =
+  Embed_pp.apply_embeds_side_effects m xd lookup embed_preamble;
+  Embed_pp.apply_embeds_side_effects m xd lookup embeds
+
+let prepare_structure_embed_side_effects m xd lookup structure =
+  List.iter
+    (function
+      | (_, Struct_rs ntrs) ->
+          let rs = List.map (fun ntr -> Auxl.rule_of_ntr xd ntr) ntrs in
+          apply_rule_embed_side_effects m xd lookup rs
+      | (_, Struct_embed embed) ->
+          Embed_pp.apply_embeds_side_effects m xd lookup [embed]
+      | _ -> ())
+    structure
+
+let pp_library fd m = 
+  let pp_lib x =
+    let l = fst !x in
+    if l <> "" then begin
+      output_string fd (Auxl.big_line_comment m "library functions");
+      output_string fd l;
+      x := ("", snd !x)
+    end in
+  match m with
+    | Isa io -> pp_lib io.isa_library
+    | Hol ho -> pp_lib ho.hol_library 
+    | Lem lo -> pp_lib lo.lem_library 
+    | Coq co -> pp_lib co.coq_library
+    | Twf wo -> pp_lib wo.twf_library
+    | Caml oo-> pp_lib oo.caml_library
+    | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "pp_library"
+
 let pp_systemdefn_core_locally_nameless fd m sd lookup = 
   set_locally_nameless m;
   let xd_ln_transformed = Ln_transform.ln_transform_syntaxdefn m sd.syntax in
   let relations_ln_transformed = Ln_transform.ln_transform_fun_or_reln_defnclass_list m sd.syntax sd.relations in 
+  let lookup_ln = Term_parser.make_parser xd_ln_transformed in
+  prepare_whole_file_embed_side_effects m sd.syntax lookup sd.syntax.xd_embed_preamble sd.syntax.xd_embed;
+  apply_rule_embed_side_effects m xd_ln_transformed lookup xd_ln_transformed.xd_rs;
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
   output_string fd (Auxl.big_line_comment m "syntax");
-  output_string fd (Grammar_pp.pp_syntaxdefn m xd_ln_transformed);
+  output_string fd
+    (Grammar_pp.pp_syntaxdefn
+       ~string_of_embeds:(Embed_pp.string_of_embeds m sd.syntax lookup)
+       m xd_ln_transformed lookup_ln);
   output_string fd ("\n");
   pp_functions_locally_nameless fd m sd xd_ln_transformed;
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
@@ -174,24 +223,7 @@ let pp_functions fd m sd lookup =
   output_string fd (Dependency.compute m sd.syntax contexts);
   ()
 
-let pp_library fd m = 
-  let pp_lib x =
-    let l = fst !x in
-    if l <> "" then begin
-      output_string fd (Auxl.big_line_comment m "library functions");
-      output_string fd l;
-      x := ("", snd !x)
-    end in
-  match m with
-    | Isa io -> pp_lib io.isa_library
-    | Hol ho -> pp_lib ho.hol_library 
-    | Lem lo -> pp_lib lo.lem_library 
-    | Coq co -> pp_lib co.coq_library
-    | Twf wo -> pp_lib wo.twf_library
-    | Caml oo-> pp_lib oo.caml_library
-    | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "pp_library"
-
-let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
+let pp_struct_entry fd m sd xd_expanded lookup string_of_rule_embeds embed_syntax stre : unit =
   pp_library fd m;
   ( let xd = sd.syntax in
   match stre with
@@ -201,12 +233,15 @@ let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
       output_string fd pp_loc;
       output_string fd (Grammar_pp.pp_metavardefn m xd mvd)
 
-  | Struct_rs ntrs -> 
+  | Struct_rs ntrs ->
       let rs = List.map (fun ntr -> Auxl.rule_of_ntr xd_expanded ntr) ntrs in
       let s = List.flatten (List.map (function r -> r.rule_loc) rs) in
       let pp_locs = if !Global_option.output_source_locations >=2 then Grammar_pp.pp_source_location m s else "" in
       output_string fd pp_locs;
-      output_string fd (Grammar_pp.pp_rule_list m xd_expanded rs);
+      output_string fd
+        (Grammar_pp.pp_rule_list
+           ~string_of_embeds:string_of_rule_embeds
+           m xd_expanded lookup rs);
       (* induction_principles_rules *)
       ( match m with
       | Coq co when not co.coq_expand_lists ->
@@ -318,37 +353,25 @@ let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
   	  (pp_locs^Dependency.compute m xd contexts))
 
   | Struct_embed embed -> 
-      Embed_pp.pp_embeds fd m sd.syntax lookup [embed] (* FIXME should be a list *)
+      Embed_pp.pp_embeds fd m embed_syntax lookup [embed] (* FIXME should be a list *)
    )
 
-let pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup =
-  List.iter (fun (_,x) -> pp_struct_entry fd m sd xd_expanded lookup x) structure_expanded
+let pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup string_of_rule_embeds embed_syntax =
+  List.iter
+    (fun (_, x) -> pp_struct_entry fd m sd xd_expanded lookup string_of_rule_embeds embed_syntax x)
+    structure_expanded
 
-(* old algorithm that ignores the structure informations: core for isa/hol/coq/twf output *)
-let pp_systemdefn_core fd m sd lookup = 
+let pp_systemdefn_core fd m sd embed_syntax lookup = 
   let xd_expanded, structure_expanded = 
     Transform.expand_lists_in_syntaxdefn m sd.syntax sd.structure in (* identity if m <> Coq *)
-  
-  output_string fd (Auxl.big_line_comment m "warning: the backend selected ignores the file structure informations");
-  Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
+  let string_of_rule_embeds = Embed_pp.string_of_embeds m embed_syntax lookup in
+  prepare_whole_file_embed_side_effects m embed_syntax lookup embed_syntax.xd_embed_preamble embed_syntax.xd_embed;
+  prepare_structure_embed_side_effects m xd_expanded lookup structure_expanded;
+  Embed_pp.pp_embeds fd m embed_syntax lookup embed_syntax.xd_embed_preamble;
   pp_auxiliary_lemmas m xd_expanded;
-  output_string fd (Auxl.big_line_comment m "syntax");
-  output_string fd (Grammar_pp.pp_syntaxdefn m xd_expanded);
-  output_string fd ("\n");
-  pp_functions fd m sd lookup;
-  Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
-  output_string fd ("\n");
-  Defns.pp_fun_or_reln_defnclass_list fd m sd.syntax lookup sd.relations;
-  output_string fd ("\n\n");
-  ( match m with
-  | Coq co when not co.coq_expand_lists ->
-      let ip = Coq_induct.pp_induction m xd_expanded xd_expanded.xd_rs in
-      if ip <> "" then begin 
-         output_string fd (Auxl.big_line_comment m "induction principles");
-         output_string fd ip;
-         output_string fd ("\n")
-      end
-  | _ -> () )
+  pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup string_of_rule_embeds embed_syntax;
+  Embed_pp.pp_embeds fd m embed_syntax lookup embed_syntax.xd_embed;
+  output_string fd "\n"
 
 (* Helper function to format Require Import statements with From Coq prefix for stdlib *)
 let format_require_import th =
@@ -357,7 +380,7 @@ let format_require_import th =
   | _ -> "Require Import " ^ th ^ "."
 
 (* old algorithm, used only when pp with -merge true *)
-let pp_systemdefn fd m sd lookup fn =
+let pp_systemdefn fd m sd embed_syntax lookup fn =
 
   match m with
   | Isa io ->
@@ -368,7 +391,7 @@ let pp_systemdefn fd m sd lookup fn =
       Printf.fprintf fd "(* generated by Ott %s from: %s *)\n" Version.n sd.sources;
       Printf.fprintf fd "theory %s\nimports %s\n" fn (String.concat " " imports);
       output_string fd "begin\n\n";
-      pp_systemdefn_core fd m sd lookup;
+      pp_systemdefn_core fd m sd embed_syntax lookup;
       output_string fd "\nend\n"
   | Hol ho ->
       Printf.fprintf fd "(* generated by Ott %s from: %s *)\n" Version.n sd.sources;
@@ -381,7 +404,7 @@ let pp_systemdefn fd m sd lookup fn =
       output_string fd "local open arithmeticTheory stringTheory containerTheory pred_setTheory listTheory \n";
       output_string fd "  finite_mapTheory in end;\n\n";
       Printf.fprintf fd "val _ = new_theory \"%s\";\n" fn;
-      pp_systemdefn_core fd m sd lookup;
+      pp_systemdefn_core fd m sd embed_syntax lookup;
       output_string fd "\nval _ = export_theory ();\n"
   | Coq co ->
       (* FZ keeping for now locally_nameless repr separated from the main *)
@@ -401,22 +424,22 @@ let pp_systemdefn fd m sd lookup fn =
                      | true -> ["Arith"; "Bool"; "List"]
                      | false -> ["Arith"; "Bool"; "List"; "Ott.ott_list_core"])
       end;
-      pp_systemdefn_core fd m sd lookup
+      pp_systemdefn_core fd m sd embed_syntax lookup
   | Twf wo ->
       Printf.fprintf fd "%%%% generated by Ott %s from: %s\n\n" Version.n sd.sources;
-      pp_systemdefn_core fd m sd lookup
+      pp_systemdefn_core fd m sd embed_syntax lookup
   | Caml oo ->
       Printf.fprintf fd "(* generated by Ott %s from: %s *)\n" Version.n sd.sources;
-      pp_systemdefn_core fd m sd lookup
+      pp_systemdefn_core fd m sd embed_syntax lookup
   | Lem lo ->
       Printf.fprintf fd "(* generated by Ott %s from: %s *)\n" Version.n sd.sources;
-      pp_systemdefn_core fd m sd lookup
+      pp_systemdefn_core fd m sd embed_syntax lookup
   | Ascii _ | Lex _ | Menhir _ | Tex _ -> Auxl.errorm m "pp_systemdefn"
      
 
 (* multi-file stuff *)
 
-let pp_systemdefn_core_io m sd lookup oi merge_fragments =
+let pp_systemdefn_core_io m sd embed_syntax lookup oi merge_fragments =
   (* if -merge true, ignore the new algorithm *)
   if merge_fragments
   then begin
@@ -424,7 +447,7 @@ let pp_systemdefn_core_io m sd lookup oi merge_fragments =
     | _ -> Auxl.error None "must specify only one output file .\n" in
     let fn = Auxl.filename_check m o in
     let fd = open_out o in
-    pp_systemdefn fd m sd lookup fn;
+    pp_systemdefn fd m sd embed_syntax lookup fn;
     close_out fd;
   end
   else if Auxl.require_locally_nameless sd.syntax
@@ -510,6 +533,7 @@ let pp_systemdefn_core_io m sd lookup oi merge_fragments =
 
       let xd_expanded, structure_expanded = 
         Transform.expand_lists_in_syntaxdefn m sd.syntax sd.structure in (* identity if m <> Coq *)
+      let string_of_rule_embeds = Embed_pp.string_of_embeds m embed_syntax lookup in
 
       (* print_endline ("**** structure after expand ***\n "^( Auxl.dump_structure_fn structure_expanded)); *)
       
@@ -518,10 +542,17 @@ let pp_systemdefn_core_io m sd lookup oi merge_fragments =
       | (o,(i::[]))::[] ->
           let fn = Auxl.filename_check m o in 
           let fd = open_out o in
-          pp_systemdefn_structure fd m sd xd_expanded ([std_preamble_embed fn]) lookup;
+          let structure_for_file =
+            [std_preamble_embed fn] @ structure_expanded @ std_postamble_embed fn
+          in
+          prepare_whole_file_embed_side_effects m embed_syntax lookup embed_syntax.xd_embed_preamble embed_syntax.xd_embed;
+          prepare_structure_embed_side_effects m xd_expanded lookup structure_for_file;
+          pp_systemdefn_structure fd m sd xd_expanded ([std_preamble_embed fn]) lookup string_of_rule_embeds embed_syntax;
+          Embed_pp.pp_embeds fd m embed_syntax lookup embed_syntax.xd_embed_preamble;
           pp_auxiliary_lemmas m xd_expanded;
-          pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup;
-          pp_systemdefn_structure fd m sd xd_expanded (std_postamble_embed fn) lookup;
+          pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup string_of_rule_embeds embed_syntax;
+          Embed_pp.pp_embeds fd m embed_syntax lookup embed_syntax.xd_embed;
+          pp_systemdefn_structure fd m sd xd_expanded (std_postamble_embed fn) lookup string_of_rule_embeds embed_syntax;
           output_string fd "\n\n";
           close_out fd
       | _ ->
@@ -530,11 +561,24 @@ let pp_systemdefn_core_io m sd lookup oi merge_fragments =
               let fn = Auxl.filename_check m o in
               let struct_subset = 
                 List.filter (fun (fn,s) -> List.mem fn is) structure_expanded in
+              let embed_preamble_subset =
+                embeds_for_input_files is embed_syntax.xd_embed_preamble
+              in
+              let embed_subset =
+                embeds_for_input_files is embed_syntax.xd_embed
+              in
               let fd = open_out o in
-              pp_systemdefn_structure fd m sd xd_expanded ([std_preamble_embed fn]) lookup;
+              let structure_for_file =
+                [std_preamble_embed fn] @ struct_subset @ std_postamble_embed fn
+              in
+              prepare_whole_file_embed_side_effects m embed_syntax lookup embed_preamble_subset embed_subset;
+              prepare_structure_embed_side_effects m xd_expanded lookup structure_for_file;
+              pp_systemdefn_structure fd m sd xd_expanded ([std_preamble_embed fn]) lookup string_of_rule_embeds embed_syntax;
+              Embed_pp.pp_embeds fd m embed_syntax lookup embed_preamble_subset;
               pp_auxiliary_lemmas m xd_expanded;
-              pp_systemdefn_structure fd m sd xd_expanded struct_subset lookup;
-              pp_systemdefn_structure fd m sd xd_expanded (std_postamble_embed fn) lookup;
+              pp_systemdefn_structure fd m sd xd_expanded struct_subset lookup string_of_rule_embeds embed_syntax;
+              Embed_pp.pp_embeds fd m embed_syntax lookup embed_subset;
+              pp_systemdefn_structure fd m sd xd_expanded (std_postamble_embed fn) lookup string_of_rule_embeds embed_syntax;
               output_string fd "\n\n";
               close_out fd)
             oi
@@ -547,6 +591,10 @@ let pp_systemdefn_core_tex m sd lookup oi =
   let xo = match m with | Tex xo -> xo | _ -> Auxl.error None "internal: pp_systemdefn_core_tex on non-tex pp_mode\n" in
   match oi with
   | (o,is)::[] ->
+      let string_of_rule_embeds = Embed_pp.string_of_embeds m sd.syntax lookup in
+      let _, structure_embeds =
+        collect_backend_structure_embeds m sd.syntax lookup sd.structure
+      in
       let fd = open_out o in
       Printf.fprintf fd ("%% generated by Ott %s from: %s\n") Version.n sd.sources;
       if xo.ppt_wrap then begin
@@ -594,12 +642,16 @@ let pp_systemdefn_core_tex m sd lookup oi =
       Printf.fprintf fd ("\\newcommand{%s}{\\\\[5.0mm]}\n") (Grammar_pp.pp_tex_INTERRULE_NAME m );
       Printf.fprintf fd ("\\newcommand{%s}{\\\\}\n") (Grammar_pp.pp_tex_AFTERLASTRULE_NAME m );
       Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
-      output_string fd (Grammar_pp.pp_syntaxdefn m sd.syntax);
+      output_string fd
+        (Grammar_pp.pp_syntaxdefn
+           ~string_of_embeds:string_of_rule_embeds
+           m sd.syntax lookup);
       Defns.pp_fun_or_reln_defnclass_list fd m sd.syntax lookup sd.relations;
       Printf.fprintf fd ("\\newcommand{%s}{%s\\\\[0pt]\n%s\\\\[5.0mm]\n")
         (Grammar_pp.pp_tex_ALL_NAME m)
         (Grammar_pp.pp_tex_METAVARS_NAME m)
         (Grammar_pp.pp_tex_RULES_NAME m);
+      Embed_pp.pp_embeds fd m sd.syntax lookup structure_embeds;
       Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
       Printf.fprintf fd "%s}\n\n"
           (Grammar_pp.pp_tex_DEFNSS_NAME m);
@@ -614,4 +666,3 @@ let pp_systemdefn_core_tex m sd lookup oi =
       end;
       close_out fd;
   | _ -> Auxl.error None "must specify only one output file in the TeX backend.\n"
-
