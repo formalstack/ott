@@ -37,8 +37,12 @@ val pp_embeds :
   Types.syntaxdefn ->
   Types.made_parser ->
   (Types.loc * Types.hom_name * Types.embed_spec_el list) list -> unit
+val string_of_embeds :
+  Types.pp_mode ->
+  Types.syntaxdefn ->
+  Types.made_parser ->
+  (Types.loc * Types.hom_name * Types.embed_spec_el list) list -> string
 val pp_embed_spec :
   out_channel ->
   Types.pp_mode ->
   Types.syntaxdefn -> Types.made_parser -> Types.embed_spec_el list -> unit
-

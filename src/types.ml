@@ -231,6 +231,7 @@ and rule =  (* r *)
       rule_pn_wrapper : string;
       rule_ps : prod list;
       rule_homs : homomorphism list;
+      rule_embeds : embed list;
       rule_meta : bool; 
         (* semi_meta OR rule occurs as srs_lower OR phantom *)
       rule_semi_meta : bool; 
@@ -635,6 +636,7 @@ and raw_rule =
       raw_rule_pn_wrapper : string;
       raw_rule_ps : raw_prod list;
       raw_rule_homs : raw_homomorphism list;
+      raw_rule_embeds : raw_embed list;
       raw_rule_categories : string list;
       raw_rule_loc : loc }
 

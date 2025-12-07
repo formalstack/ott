@@ -143,6 +143,7 @@ let aux_rule (rr:raw_rule) ((before :string list),(after : string list), (l :loc
     raw_rule_pn_wrapper = "";
     raw_rule_ps = [aux_prod];
     raw_rule_homs = List.filter (function (hn,_,_) ->  hn="auxparam") rr.raw_rule_homs;
+    raw_rule_embeds = [];
     raw_rule_categories = ["aux"];
     raw_rule_loc = l }
 
@@ -278,7 +279,9 @@ let merge_raw_rules (rrs:raw_rule list) : raw_rule list * (nontermroot*loc*nonte
   let collected_rules = collect (function rr -> rr.raw_rule_ntr_name) rrs in
   let append_raw_rule (rr:raw_rule) (rr':raw_rule) : raw_rule =
     merged := (rr.raw_rule_ntr_name,rr.raw_rule_loc, rr'.raw_rule_ntr_name,rr'.raw_rule_loc)::!merged;
-    { rr with raw_rule_ps = rr.raw_rule_ps @ rr'.raw_rule_ps } in
+    { rr with
+      raw_rule_ps = rr.raw_rule_ps @ rr'.raw_rule_ps;
+      raw_rule_embeds = rr.raw_rule_embeds @ rr'.raw_rule_embeds } in
   let rec f rrs = match rrs with
   | [] -> Auxl.int_error "merge_raw_rules"
   | [rr] -> rr
@@ -1491,6 +1494,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_rule_pn_wrapper = dc.raw_dc_wrapper;
       raw_rule_ps = List.map sd_prod_of_defn dc.raw_dc_defns;
       raw_rule_homs = [];
+      raw_rule_embeds = [];
       raw_rule_categories = ["defnclass"];
       raw_rule_loc = dc.raw_dc_loc } in
 
@@ -1509,6 +1513,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_rule_pn_wrapper = "fundefn_";
       raw_rule_ps = List.map defn_sd_prod_of_fundefn fdc.raw_fdc_fundefns;
       raw_rule_homs = [];
+      raw_rule_embeds = [];
       raw_rule_categories = ["fundefnclass"];
       raw_rule_loc = fdc.raw_fdc_loc } in
 
@@ -1663,6 +1668,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
 			    raw_prod_bs = [];
 			    raw_prod_loc = dummy_loc } ];
 	raw_rule_homs = [];
+	raw_rule_embeds = [];
 	raw_rule_categories = ["formula"];
 	raw_rule_loc = dummy_loc } ] in
    
@@ -1683,6 +1689,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_rule_pn_wrapper = "judgement_";
       raw_rule_ps = List.map prod_of_root judgement_nontermroots;
       raw_rule_homs = [];
+      raw_rule_embeds = [];
       raw_rule_categories = ["judgement"];
       raw_rule_loc = dummy_loc } in
 
@@ -1702,6 +1709,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       raw_rule_pn_wrapper = "user_syntax__";
       raw_rule_ps = List.map prod_of_root (user_syntax_metavarroots @ user_syntax_nontermroots);
       raw_rule_homs = [];
+      raw_rule_embeds = [];
       raw_rule_categories = ["user_syntax"];
       raw_rule_loc = dummy_loc } in
   
@@ -1964,6 +1972,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       rule_pn_wrapper = r.raw_rule_pn_wrapper;
       rule_ps = List.map (cd_prod c r.raw_rule_ntr_name r.raw_rule_pn_wrapper targets rule_homs_for_targets) r.raw_rule_ps;
       rule_homs = rule_homs;
+      rule_embeds = cd_embeds c r.raw_rule_embeds;
       rule_meta = 
       ( rule_semi_meta
       || List.mem r.raw_rule_ntr_name srs_lowers
@@ -2892,4 +2901,3 @@ let check_with_parser (lookup : made_parser) (xd: syntaxdefn) : unit =
   in         
   (* for each rule, test all productions *)
   List.iter (fun cr -> ctxrule cr.cr_hole cr.cr_ntr cr.cr_target) xd.xd_crs; 
-

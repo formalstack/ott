@@ -2706,7 +2706,7 @@ and         (* the strip_surrounding_parens is a horrible hack to remove the par
   if s.[0]='(' && s.[String.length s -1]=')' then String.sub s 1 (String.length s -2) else s 
 
 
-and pp_rule_list m xd rs = 
+and pp_rule_list ?(collect_segment=(fun (_:string) (_:rule list) -> ())) m xd _lookup rs = 
   (* FZ why rs is a rule list instead of a rulename list? *)
   let ntrs_rs = List.map (fun r -> r.rule_ntr_name) rs in
 
@@ -2724,9 +2724,10 @@ and pp_rule_list m xd rs =
     (*                  (List.map (fun rg -> (String.concat " " *)
     (*                                          (List.map pp_plain_nt_or_mv_root rg))) rule_groups)); *)
 
-    String.concat "" 
-      ( List.map 
-	  ( fun b -> 
+    let rec build_segments groups =
+      match groups with
+      | [] -> []
+      | b::bs ->
             match b with 
             (* either there is exactly one ntr in this block, with a hom, *)
             (* and we generate a type abbreviation *)
@@ -2735,78 +2736,86 @@ and pp_rule_list m xd rs =
                       && match m with Isa _ | Coq _ | Hol _ | Lem _ | Caml _ -> true | _ -> false) 
               ->
 (* PS hack to turn off printing of phantom nonterms which would otherwise turn into type abbreviations.  Please check - maybe this should be before dependency analysis??? *)
-                if (Auxl.rule_of_ntr xd ntr).rule_phantom then "" else 
-		let hs = Auxl.the 
-                    (Auxl.hom_spec_for_pp_mode m (Auxl.rule_of_ntr xd ntr).rule_homs) in
-                ( match m with 
-                | Isa _ -> 
-                    "type_synonym "
-                    ^ "\"" ^ pp_nontermroot_ty m xd ntr ^ "\" = \""
-                    ^ pp_hom_spec m xd hs
-                    ^ "\"\n"
-                | Hol _ -> 
-                    "\nType "
-                    ^ pp_nontermroot_ty m xd ntr ^ " = ``:"
-                    ^ pp_hom_spec m xd hs
-                    ^ "``\n"
-                | Coq _ ->
-                    let homs = (Auxl.rule_of_ntr xd ntr).rule_homs in
-                    let type_name = pp_nontermroot_ty m xd ntr in
-                    let universe =
-                      match Auxl.hom_spec_for_hom_name "rocq-universe" homs with
-                      | Some hs -> pp_hom_spec m xd hs
-                      | None -> "Set"
-                    in
-                    let body = pp_hom_spec m xd hs in
-                    if Auxl.hom_spec_for_hom_name "rocq-notation" homs <> None then
-                      "\nNotation " ^ type_name ^ " := (" ^ body ^ " : " ^ universe ^ ").\n"
-                    else
-                      "\nDefinition " ^ type_name ^ " : " ^ universe ^ " := " ^ body ^ ".\n"
-                | Twf _ -> 
-                    "\n%abbrev "
-                    ^ pp_nontermroot_ty m xd ntr ^ " : type = "
-                    ^ pp_hom_spec m xd hs
-                    ^ ".\n"
-                | Caml _ -> 
-                    "\ntype\n"
-                    ^ pp_nontermroot_ty m xd ntr ^ " = "
-                    ^ pp_hom_spec m xd hs
-                    ^ "\n\n"
-                | Lem _ -> 
-                    "\ntype "
-                    ^ strip_surrounding_parens (pp_nontermroot_ty m xd ntr) ^ " = "
-                    ^ pp_hom_spec m xd hs
-                    ^ "\n\n"
-                | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "int_rule_list_dep" )
+                let r = Auxl.rule_of_ntr xd ntr in
+                let segment =
+                  if r.rule_phantom then ""
+                  else
+		    let hs = Auxl.the 
+                        (Auxl.hom_spec_for_pp_mode m r.rule_homs) in
+                    ( match m with 
+                    | Isa _ -> 
+                        "type_synonym "
+                        ^ "\"" ^ pp_nontermroot_ty m xd ntr ^ "\" = \""
+                        ^ pp_hom_spec m xd hs
+                        ^ "\"\n"
+                    | Hol _ -> 
+                        "\nType "
+                        ^ pp_nontermroot_ty m xd ntr ^ " = ``:"
+                        ^ pp_hom_spec m xd hs
+                        ^ "``\n"
+                    | Coq _ ->
+                        let homs = r.rule_homs in
+                        let type_name = pp_nontermroot_ty m xd ntr in
+                        let universe =
+                          match Auxl.hom_spec_for_hom_name "rocq-universe" homs with
+                          | Some hs -> pp_hom_spec m xd hs
+                          | None -> "Set"
+                        in
+                        let body = pp_hom_spec m xd hs in
+                        if Auxl.hom_spec_for_hom_name "rocq-notation" homs <> None then
+                          "\nNotation " ^ type_name ^ " := (" ^ body ^ " : " ^ universe ^ ").\n"
+                        else
+                          "\nDefinition " ^ type_name ^ " : " ^ universe ^ " := " ^ body ^ ".\n"
+                    | Twf _ -> 
+                        "\n%abbrev "
+                        ^ pp_nontermroot_ty m xd ntr ^ " : type = "
+                        ^ pp_hom_spec m xd hs
+                        ^ ".\n"
+                    | Caml _ -> 
+                        "\ntype\n"
+                        ^ pp_nontermroot_ty m xd ntr ^ " = "
+                        ^ pp_hom_spec m xd hs
+                        ^ "\n\n"
+                    | Lem _ -> 
+                        "\ntype "
+                        ^ strip_surrounding_parens (pp_nontermroot_ty m xd ntr) ^ " = "
+                        ^ pp_hom_spec m xd hs
+                        ^ "\n\n"
+                    | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "int_rule_list_dep" )
+                in
+                collect_segment segment [r];
+                segment :: build_segments bs
             (* or not, in which case we generate an inductive type definition *)
             | b ->    
                 let b = List.rev b in (* FZ this ensures that the output follows the source order *)
+	        let rules_in_group =
+	          Auxl.option_map 
+                    ( function
+                    | Mvr mvr -> None
+                    | Ntr ntr -> Some (Auxl.rule_of_ntr xd ntr) )
+		        b in
 	        let def_string =
 	          String.concat md 
-		    ( Auxl.option_map 
-		        ( fun nm -> 
-		          ( match nm with
-		          | Mvr mvr -> None
-		          | Ntr ntr -> pp_rule m xd (Auxl.rule_of_ntr xd ntr) ))
-		        b ) in
-	        if (String.length def_string) = 0 then ""
-	        else 
-                  let tds = 
-                    td ( Auxl.option_map 
-		         ( fun nm -> 
-		           ( match nm with
-		           | Mvr mvr -> None
-		           | Ntr ntr -> Some (Auxl.rule_of_ntr xd ntr) ))
-		         b ) in
-                      
-                  tds ^ def_string ^ fd ^ "\n")
-	  rule_groups)
+		    (Auxl.option_map (pp_rule m xd) rules_in_group) in
+                let segment =
+	          if (String.length def_string) = 0 then ""
+	          else 
+                    let tds = td rules_in_group in
+                    tds ^ def_string ^ fd ^ "\n" in
+                collect_segment segment rules_in_group;
+                segment :: build_segments bs
+    in
+    String.concat "" (build_segments rule_groups)
   in
 
   match m with 
   | Ascii ao -> 
       if (Auxl.select_dep_ts m xd.xd_dep) = [] 
-      then String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) ^ "\n" 
+      then (
+        let segment = String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) ^ "\n" in
+        collect_segment segment rs;
+        segment
+      )
       else int_rule_list_dep m xd rs (fun rs -> "\n") "\n" ""
   | Isa io ->
       int_rule_list_dep m xd rs 
@@ -2827,8 +2836,8 @@ and pp_rule_list m xd rs =
   | Lem lo ->
       int_rule_list_dep m xd rs (fun rs -> "\ntype ") "\nand " ""
   | Tex xo ->
-      String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) 
-      ^ "\n" 
+      let defs_block = String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) in
+      let segment = defs_block 
       ^ "\\newcommand{"^pp_tex_RULES_NAME m^"}{"
       ^ pp_tex_BEGIN_RULES m
       ^ String.concat (pp_tex_INTERRULE_NAME m ^"\n" )
@@ -2838,13 +2847,17 @@ and pp_rule_list m xd rs =
                  List.mem r.rule_ntr_name xo.ppt_suppressed_ntrs
                in
                if suppressed_ntr || (not(xo.ppt_show_meta) && r.rule_semi_meta) then 
-                 None
-               else Some (tex_rule_name m r.rule_ntr_name))
-             rs)
+                None
+              else Some (tex_rule_name m r.rule_ntr_name))
+            rs)
       ^ (match rs with []-> "" | _ -> pp_tex_AFTERLASTRULE_NAME m)
-      ^ "\n"^pp_tex_END_RULES ^ "}\n\n"
+      ^ "\n"^pp_tex_END_RULES ^ "}\n\n" in
+      collect_segment segment rs;
+      segment
   | Lex _ | Menhir _ ->
-      String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) 
+      let segment = String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) in
+      collect_segment segment rs;
+      segment
  
 
 and pp_ascii_subrule m xd sr = 
@@ -2950,12 +2963,12 @@ and pp_ascii_subst m xd subst =
   ^ pp_nt_or_mv_root m xd subst.sb_that^ " "
   ^ pp_homomorphism_list m xd subst.sb_homs 
 
-and pp_syntaxdefn m xd = 
+and pp_syntaxdefn ?(collect_rule_segment=(fun (_:string) (_:rule list) -> ())) m xd lookup = 
   match m with
   | Ascii ao -> 
       String.concat "\n" (List.map (pp_metavardefn m xd) xd.xd_mds) 
       ^ pp_RULES^"\n"
-      ^ pp_rule_list m xd xd.xd_rs ^ "\n" 
+      ^ pp_rule_list ~collect_segment:collect_rule_segment m xd lookup xd.xd_rs ^ "\n" 
       ^ pp_SUBRULES^"\n"
       ^ String.concat "\n" (List.map (pp_ascii_subrule m xd) xd.xd_srs) ^"\n"
       ^ String.concat "\n" (List.map (pp_ascii_contextrule m xd) xd.xd_crs) ^"\n\n"
@@ -2966,13 +2979,13 @@ and pp_syntaxdefn m xd =
         else "")
   | Isa _ | Coq _ | Hol _ | Lem _ | Twf _ | Caml _ ->
       String.concat "" (List.map (pp_metavardefn m xd) xd.xd_mds) 
-      ^ pp_rule_list m xd xd.xd_rs 
+      ^ pp_rule_list ~collect_segment:collect_rule_segment m xd lookup xd.xd_rs 
   | Tex _ ->
       "\\newcommand{"^pp_tex_METAVARS_NAME m^"}{\n"
       ^ pp_tex_BEGIN_METAVARS m  (*  "\\[\\begin{array}{l}\n" *)
       ^ String.concat "\n" (List.map (pp_metavardefn m xd) xd.xd_mds) 
       ^ "\n"^pp_tex_END_METAVARS ^"}\n\n"  (*  ^ "\\end{array}\\]\n" *)
-      ^ pp_rule_list m xd xd.xd_rs
+      ^ pp_rule_list ~collect_segment:collect_rule_segment m xd lookup xd.xd_rs
   | Lex _ | Menhir _ ->
       "<<TODO>>"
 
@@ -4292,4 +4305,3 @@ let pp_pp_mode m = match m with
   | Caml _ -> "Caml"
   | Lex _  -> "Lex"
   | Menhir _ -> "Menhir"
-

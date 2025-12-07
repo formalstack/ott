@@ -358,6 +358,7 @@ let ln_add_lc_judgment m xd =
         prod_bs = [];
 	prod_loc = dummy_loc } ];
       rule_homs = [];
+      rule_embeds = [];
       rule_meta = true;    
       rule_semi_meta = false;
       rule_phantom = false;
@@ -531,6 +532,7 @@ let ln_transform_syntaxdefn (m:pp_mode) (xd:syntaxdefn) : syntaxdefn =
 	  prod_loc = dummy_loc }
       ];
       rule_homs = [];
+      rule_embeds = [];
       rule_meta = true;
       rule_semi_meta = true;
       rule_phantom = true;
@@ -565,7 +567,8 @@ let ln_transform_syntaxdefn (m:pp_mode) (xd:syntaxdefn) : syntaxdefn =
   ln_debug "*****************************";
   ln_debug "*** transformed syntaxdef ***";
   ln_debug "*****************************";
-  ln_debug (Grammar_pp.pp_syntaxdefn error_opts xd); 
+  let lookup = Term_parser.make_parser xd in
+  ln_debug (Grammar_pp.pp_syntaxdefn error_opts xd lookup); 
   xd
 
 
@@ -1837,4 +1840,3 @@ Tactic Notation \"apply_fresh\" \"*\" constr(T) \"as\" ident(x) :=
    Arthur defines only bgvar for patterns.  Can we assume that if a
    variable has a auxfn defined on it will never be in non-binding
    position? *)
-

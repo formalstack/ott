@@ -650,9 +650,11 @@ let process source_filenames =
   in
 
 
+  let lookup = Term_parser.make_parser xd in 
+
   if !show_sort then (
     print_endline "********** AFTER CHECK, DISAMBIGUATE AND SORT  *********************\n"; 
-    print_endline (Grammar_pp.pp_syntaxdefn m_ascii xd));
+    print_endline (Grammar_pp.pp_syntaxdefn m_ascii xd lookup));
 
   (* FZ sorting is now performed while checking and disambiguate *)
   (* let xd =  *)
@@ -667,8 +669,6 @@ let process source_filenames =
 
   (* make parser for symbolic terms *)
 
-  let lookup = Term_parser.make_parser xd in 
-  
   begin try
     Grammar_typecheck.check_with_parser lookup xd
   with

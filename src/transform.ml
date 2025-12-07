@@ -240,6 +240,7 @@ let expand_element (m:pp_mode) (xd:syntaxdefn) (bs:bindspec list) (e:element) :
 	  rule_pn_wrapper = "";
 	  rule_ps = [ nil_prod; cons_prod ];
 	  rule_homs = [("rocq-universe", [Hom_string id_universe])];
+	  rule_embeds = [];
 	  rule_meta = false;
 	  rule_semi_meta = false;
           rule_phantom = false;
@@ -414,4 +415,3 @@ let expand_lists_in_syntaxdefn (m:pp_mode) (xd:syntaxdefn) (structure: structure
       expanded_structure
 
   | _ -> xd, structure
-

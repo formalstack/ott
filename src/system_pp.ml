@@ -112,13 +112,110 @@ let set_locally_nameless m =
   (* TODO *)
   | _ -> Auxl.error None "locally-nameless: only the Coq backend understand {{ repr-locally-nameless }}.\n"
 
+module StringSet = Set.Make(String)
+
+let string_of_rule_embeds m xd lookup rules =
+  String.concat ""
+    (List.map
+       (fun r -> Embed_pp.string_of_embeds m xd lookup r.rule_embeds)
+       rules)
+
+let decorate_syntax m xd lookup syntax_text segments =
+  match m with
+  | Tex _ -> syntax_text
+  | _ ->
+      let buf = Buffer.create (String.length syntax_text + 256) in
+      let len = String.length syntax_text in
+      let rec find_substring s sub start =
+        let sub_len = String.length sub in
+        if sub_len = 0 then start
+        else
+          let rec search i =
+            if i > len - sub_len then
+              raise Not_found
+            else if String.sub s i sub_len = sub then
+              i
+            else
+              search (i + 1)
+          in
+          search start
+      in
+      let rec emit pos remaining_segments =
+        match remaining_segments with
+        | [] ->
+            Buffer.add_substring buf syntax_text pos (len - pos)
+        | (segment, rules) :: rest ->
+            let embed_text = string_of_rule_embeds m xd lookup rules in
+            if segment = "" then begin
+              if embed_text <> "" then Buffer.add_string buf embed_text;
+              emit pos rest
+            end else begin
+              let idx =
+                try find_substring syntax_text segment pos
+                with Not_found ->
+                  Auxl.int_error "decorate_syntax: segment not found when reinserting embeds"
+              in
+              Buffer.add_substring buf syntax_text pos (idx - pos);
+              Buffer.add_string buf segment;
+              if embed_text <> "" then Buffer.add_string buf embed_text;
+              emit (idx + String.length segment) rest
+            end
+      in
+      emit 0 segments;
+      Buffer.contents buf
+
+let output_syntax_with_segments fd m xd lookup =
+  let segments = ref [] in
+  let collect_segment segment rules =
+    segments := (segment, rules) :: !segments
+  in
+  let syntax_text =
+    Grammar_pp.pp_syntaxdefn ~collect_rule_segment:collect_segment m xd lookup
+  in
+  let segments = List.rev !segments in
+  let decorated = decorate_syntax m xd lookup syntax_text segments in
+  output_string fd decorated;
+  segments
+
+let printed_rule_names segments =
+  List.fold_left
+    (fun acc (_, rules) ->
+       List.fold_left (fun acc r -> StringSet.add r.rule_ntr_name acc) acc rules)
+    StringSet.empty
+    segments
+
+let rule_embeds_text m xd lookup segments =
+  match m with
+  | Tex _ ->
+      let buf = Buffer.create 256 in
+      List.iter
+        (fun (_, rules) ->
+           let text = string_of_rule_embeds m xd lookup rules in
+           if text <> "" then Buffer.add_string buf text)
+        segments;
+      Buffer.contents buf
+  | _ -> ""
+
 let pp_systemdefn_core_locally_nameless fd m sd lookup = 
   set_locally_nameless m;
   let xd_ln_transformed = Ln_transform.ln_transform_syntaxdefn m sd.syntax in
   let relations_ln_transformed = Ln_transform.ln_transform_fun_or_reln_defnclass_list m sd.syntax sd.relations in 
+  let lookup_ln = Term_parser.make_parser xd_ln_transformed in
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
   output_string fd (Auxl.big_line_comment m "syntax");
-  output_string fd (Grammar_pp.pp_syntaxdefn m xd_ln_transformed);
+  let rule_segments =
+    output_syntax_with_segments fd m xd_ln_transformed lookup_ln
+  in
+  let rule_embeds =
+    rule_embeds_text m xd_ln_transformed lookup_ln rule_segments
+  in
+  output_string fd rule_embeds;
+  let printed = printed_rule_names rule_segments in
+  List.iter
+    (fun r ->
+       if r.rule_embeds <> [] && not (StringSet.mem r.rule_ntr_name printed) then
+         Embed_pp.pp_embeds fd m xd_ln_transformed lookup_ln r.rule_embeds)
+    xd_ln_transformed.xd_rs;
   output_string fd ("\n");
   pp_functions_locally_nameless fd m sd xd_ln_transformed;
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
@@ -206,7 +303,28 @@ let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
       let s = List.flatten (List.map (function r -> r.rule_loc) rs) in
       let pp_locs = if !Global_option.output_source_locations >=2 then Grammar_pp.pp_source_location m s else "" in
       output_string fd pp_locs;
-      output_string fd (Grammar_pp.pp_rule_list m xd_expanded rs);
+      let segments = ref [] in
+      let collect_segment segment rules =
+        segments := (segment, rules) :: !segments
+      in
+      let rules_text =
+        Grammar_pp.pp_rule_list ~collect_segment m xd_expanded lookup rs
+      in
+      let segments_rev = List.rev !segments in
+      let decorated =
+        decorate_syntax m xd_expanded lookup rules_text segments_rev
+      in
+      output_string fd decorated;
+      let rule_embeds =
+        rule_embeds_text m xd_expanded lookup segments_rev
+      in
+      output_string fd rule_embeds;
+      let printed = printed_rule_names segments_rev in
+      List.iter
+        (fun r ->
+           if r.rule_embeds <> [] && not (StringSet.mem r.rule_ntr_name printed) then
+             Embed_pp.pp_embeds fd m xd_expanded lookup r.rule_embeds)
+        xd_expanded.xd_rs;
       (* induction_principles_rules *)
       ( match m with
       | Coq co when not co.coq_expand_lists ->
@@ -328,12 +446,25 @@ let pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup =
 let pp_systemdefn_core fd m sd lookup = 
   let xd_expanded, structure_expanded = 
     Transform.expand_lists_in_syntaxdefn m sd.syntax sd.structure in (* identity if m <> Coq *)
+  let lookup_expanded = Term_parser.make_parser xd_expanded in
   
   output_string fd (Auxl.big_line_comment m "warning: the backend selected ignores the file structure informations");
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
   pp_auxiliary_lemmas m xd_expanded;
   output_string fd (Auxl.big_line_comment m "syntax");
-  output_string fd (Grammar_pp.pp_syntaxdefn m xd_expanded);
+  let rule_segments =
+    output_syntax_with_segments fd m xd_expanded lookup_expanded
+  in
+  let rule_embeds =
+    rule_embeds_text m xd_expanded lookup_expanded rule_segments
+  in
+  output_string fd rule_embeds;
+  let printed = printed_rule_names rule_segments in
+  List.iter
+    (fun r ->
+       if r.rule_embeds <> [] && not (StringSet.mem r.rule_ntr_name printed) then
+         Embed_pp.pp_embeds fd m xd_expanded lookup_expanded r.rule_embeds)
+    xd_expanded.xd_rs;
   output_string fd ("\n");
   pp_functions fd m sd lookup;
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
@@ -594,12 +725,24 @@ let pp_systemdefn_core_tex m sd lookup oi =
       Printf.fprintf fd ("\\newcommand{%s}{\\\\[5.0mm]}\n") (Grammar_pp.pp_tex_INTERRULE_NAME m );
       Printf.fprintf fd ("\\newcommand{%s}{\\\\}\n") (Grammar_pp.pp_tex_AFTERLASTRULE_NAME m );
       Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
-      output_string fd (Grammar_pp.pp_syntaxdefn m sd.syntax);
+      let rule_segments =
+        output_syntax_with_segments fd m sd.syntax lookup
+      in
+      let rule_embeds =
+        rule_embeds_text m sd.syntax lookup rule_segments
+      in
+      let printed = printed_rule_names rule_segments in
+      List.iter
+        (fun r ->
+           if r.rule_embeds <> [] && not (StringSet.mem r.rule_ntr_name printed) then
+             Embed_pp.pp_embeds fd m sd.syntax lookup r.rule_embeds)
+        sd.syntax.xd_rs;
       Defns.pp_fun_or_reln_defnclass_list fd m sd.syntax lookup sd.relations;
       Printf.fprintf fd ("\\newcommand{%s}{%s\\\\[0pt]\n%s\\\\[5.0mm]\n")
         (Grammar_pp.pp_tex_ALL_NAME m)
         (Grammar_pp.pp_tex_METAVARS_NAME m)
         (Grammar_pp.pp_tex_RULES_NAME m);
+      output_string fd rule_embeds;
       Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
       Printf.fprintf fd "%s}\n\n"
           (Grammar_pp.pp_tex_DEFNSS_NAME m);
@@ -614,4 +757,3 @@ let pp_systemdefn_core_tex m sd lookup oi =
       end;
       close_out fd;
   | _ -> Auxl.error None "must specify only one output file in the TeX backend.\n"
-

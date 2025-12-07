@@ -38,6 +38,12 @@
  *)
 
 let fast_parse = ref false 
+
+(* These delimiters must stay consistent with Grammar_pp. *)
+let comp_left = "</"
+let comp_middle = "//"
+let comp_right = "/>"
+let comp_in = "IN"
   (* true: do not add pseudoterminals :rulename: and :concrete: to grammar *)
 
 open Types;;
@@ -426,9 +432,9 @@ let build_grammar (xd : syntaxdefn)
               in
               let wsidxvar_nt = [mkNT Nt.whitespace; mkNT Nt.indexvar] in
               let list_form_prefix =
-                make_listform_token Grammar_pp.pp_COMP_LEFT @
+                make_listform_token comp_left @
                 [NT concrete_list_entry_nt] @
-                make_listform_token Grammar_pp.pp_COMP_MIDDLE @
+                make_listform_token comp_middle @
                 wsidxvar_nt
               in
               (* list_form_nt : Res_stli *)
@@ -484,7 +490,7 @@ let build_grammar (xd : syntaxdefn)
                 add_prod
                   list_form_nt
                   (list_form_prefix @ 
-                   make_listform_token Grammar_pp.pp_COMP_RIGHT)
+                   make_listform_token comp_right)
                   (fun [_; Res_stli (Stli_single (_, es)); _; _; Res_string ivr;
                         _] ->
                      let es'' = 
@@ -502,9 +508,9 @@ let build_grammar (xd : syntaxdefn)
                 add_prod
                   list_form_nt
                   (list_form_prefix @
-                   make_listform_token Grammar_pp.pp_COMP_IN @
+                   make_listform_token comp_in @
                    wsidxvar_nt @
-                   make_listform_token Grammar_pp.pp_COMP_RIGHT)
+                   make_listform_token comp_right)
                   (fun [_; Res_stli (Stli_single (_, es)); _; _; Res_string ivr;
                         _;
                         _; Res_string ivr';
@@ -525,14 +531,14 @@ let build_grammar (xd : syntaxdefn)
                 add_prod
                   list_form_nt
                   (list_form_prefix @
-                   make_listform_token Grammar_pp.pp_COMP_IN @
+                   make_listform_token comp_in @
                    [mkNT Nt.whitespace;
                     mkNT Nt.number;
                     mkNT Nt.whitespace; 
                     mkNT Nt.dots;
                     mkNT Nt.whitespace;
                     mkNT Nt.indexvar_fancy_suffix] @
-                   make_listform_token Grammar_pp.pp_COMP_RIGHT)
+                   make_listform_token comp_right)
                   (fun [_; Res_stli (Stli_single (_, es)); _; _; Res_string ivr;
                         _;
                         _;

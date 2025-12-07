@@ -311,12 +311,13 @@ rule_list:
  | rule rule_list                 { $1 :: $2 }
 
 rule: 
-   ne_ident_hom_desc_list COLONCOLON STRING CCE homomorphism_list prodlist 
+   ne_ident_hom_desc_list COLONCOLON STRING CCE homomorphism_list prodlist rule_embeds
      { { raw_rule_ntr_name  = fst (List.hd($1));
          raw_rule_ntr_names = $1;
          raw_rule_pn_wrapper = (fst $3);
          raw_rule_ps = $6;
 	 raw_rule_homs = $5;
+         raw_rule_embeds = $7;
          raw_rule_categories = ["user"];
          raw_rule_loc = mkl() } }
 
@@ -327,8 +328,12 @@ prod:
          raw_prod_categories = $4;
          raw_prod_es = $2;
 	 raw_prod_homs = $8;
-         raw_prod_bs = $7;
+	 raw_prod_bs = $7;
 	 raw_prod_loc = mkl() } }
+
+rule_embeds:
+   /* empty */                    { [] }
+ | EMBED embedmorphism_list rule_embeds { $2 @ $3 }
 
 prodlist:
    /* empty */                    { [] }
@@ -604,5 +609,4 @@ unfiltered_inner:
    /* empty */                         { "" }
  | STRING unfiltered_inner             { (fst $1) ^ $2 }
  | BLANKS unfiltered_inner             { $1 ^ $2 }
-
 
