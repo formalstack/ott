@@ -1,2 +1,2 @@
-let n="0.2025.09.23-formal"
-let d="Tue Sep 23 22:18:28 CEST 2025"
+let n="0.2025.12.08-formal"
+let d="Mon Dec 8 15:52:23 UTC 2025"
