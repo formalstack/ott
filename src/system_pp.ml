@@ -114,6 +114,9 @@ let set_locally_nameless m =
 
 module StringSet = Set.Make(String)
 
+let rule_from_file r filename =
+  List.exists (fun loc -> loc.Location.loc_start.Lexing.pos_fname = filename) r.rule_loc
+
 let string_of_rule_embeds m xd lookup rules =
   String.concat ""
     (List.map
@@ -288,7 +291,7 @@ let pp_library fd m =
     | Caml oo-> pp_lib oo.caml_library
     | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "pp_library"
 
-let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
+let pp_struct_entry fd m sd xd_expanded lookup source_file stre : unit =
   pp_library fd m;
   ( let xd = sd.syntax in
   match stre with
@@ -298,7 +301,7 @@ let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
       output_string fd pp_loc;
       output_string fd (Grammar_pp.pp_metavardefn m xd mvd)
 
-  | Struct_rs ntrs -> 
+  | Struct_rs ntrs ->
       let rs = List.map (fun ntr -> Auxl.rule_of_ntr xd_expanded ntr) ntrs in
       let s = List.flatten (List.map (function r -> r.rule_loc) rs) in
       let pp_locs = if !Global_option.output_source_locations >=2 then Grammar_pp.pp_source_location m s else "" in
@@ -320,10 +323,12 @@ let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
       in
       output_string fd rule_embeds;
       let printed = printed_rule_names segments_rev in
+      (* Print embeds for rules from this source file that weren't printed inline *)
       List.iter
         (fun r ->
            if r.rule_embeds <> [] && not (StringSet.mem r.rule_ntr_name printed) then
-             Embed_pp.pp_embeds fd m xd_expanded lookup r.rule_embeds)
+             if rule_from_file r source_file then
+               Embed_pp.pp_embeds fd m xd_expanded lookup r.rule_embeds)
         xd_expanded.xd_rs;
       (* induction_principles_rules *)
       ( match m with
@@ -440,7 +445,7 @@ let pp_struct_entry fd m sd xd_expanded lookup stre : unit =
    )
 
 let pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup =
-  List.iter (fun (_,x) -> pp_struct_entry fd m sd xd_expanded lookup x) structure_expanded
+  List.iter (fun (fn, x) -> pp_struct_entry fd m sd xd_expanded lookup fn x) structure_expanded
 
 (* old algorithm that ignores the structure informations: core for isa/hol/coq/twf output *)
 let pp_systemdefn_core fd m sd lookup = 
