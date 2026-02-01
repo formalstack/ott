@@ -439,12 +439,13 @@ let pp_systemdefn fd m sd embed_syntax lookup fn =
 
 (* multi-file stuff *)
 
-let pp_systemdefn_core_io m sd embed_syntax lookup oi merge_fragments =
-  (* if -merge true, ignore the new algorithm *)
-  if merge_fragments
+let pp_systemdefn_core_io m sd embed_syntax lookup oi merge_fragments preserve_structure =
+  ignore merge_fragments;
+  (* if -preserve-structure false, use old monolithic algorithm *)
+  if not preserve_structure
   then begin
-    let o = match oi with (o,is)::[] -> o 
-    | _ -> Auxl.error None "must specify only one output file .\n" in
+    let o = match oi with (o,is)::[] -> o
+    | _ -> Auxl.error None "must specify only one output file when -preserve-structure false\n" in
     let fn = Auxl.filename_check m o in
     let fd = open_out o in
     pp_systemdefn fd m sd embed_syntax lookup fn;
