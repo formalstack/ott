@@ -94,6 +94,7 @@ let rocq_lngen = ref false
 let rocq_names_in_rules = ref true
 let rocq_use_filter_fn = ref false
 let merge_fragments = ref false
+let preserve_structure = ref None  (* None = smart default based on merge_fragments *)
 let picky_multiple_parses = ref false
 let caml_include_terminals = ref false
 
@@ -148,9 +149,12 @@ let options = Arg.align [
     Arg.Tuple[Arg.String (fun s -> caml_filter_filename_srcs := s :: !caml_filter_filename_srcs);
               Arg.String (fun s -> caml_filter_filename_dsts := s :: !caml_filter_filename_dsts)],
     "<src><dst>  Files to OCaml filter" ); 
-  ( "-merge", 
-    Arg.Bool (fun b -> merge_fragments := b), 
-    "<"^string_of_bool !merge_fragments ^">         merge grammar and definition rules" ); 
+  ( "-merge",
+    Arg.Bool (fun b -> merge_fragments := b),
+    "<"^string_of_bool !merge_fragments ^">         merge grammar and definition rules" );
+  ( "-preserve-structure",
+    Arg.Bool (fun b -> preserve_structure := Some b),
+    "<auto>             preserve source file structure in output (default: false with -merge, true otherwise)" );
 
   ( "-parse", 
     Arg.String (fun s -> test_parse_list := !test_parse_list @ [s]),
@@ -776,30 +780,30 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
   in
 
   (** target outputs *)
-  List.iter 
-    (fun (t,fi) -> 
-      
+  List.iter
+    (fun (t,fi) ->
+
       match t with
-      | "tex" -> 
+      | "tex" ->
           System_pp.pp_systemdefn_core_tex m_tex sd lookup fi
-      | "rocq" | "coq" -> 
-          let sd = 
+      | "rocq" | "coq" ->
+          let sd =
             ( match !rocq_avoid with
             | 0 -> sd
             | 1 -> Auxl.avoid_primaries_systemdefn false sd
             | 2 -> Auxl.avoid_primaries_systemdefn true sd
             | _ -> Auxl.error None "rocq type-name avoidance must be in {0,1,2}" ) in
-          System_pp.pp_systemdefn_core_io m_coq sd sd.syntax lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_coq sd sd.syntax lookup fi !merge_fragments !preserve_structure
       | "isa" ->
-          System_pp.pp_systemdefn_core_io m_isa sd sd.syntax lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_isa sd sd.syntax lookup fi !merge_fragments !preserve_structure
       | "hol" ->
-          System_pp.pp_systemdefn_core_io m_hol sd sd.syntax lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_hol sd sd.syntax lookup fi !merge_fragments !preserve_structure
       | "lem" ->
-          System_pp.pp_systemdefn_core_io m_lem sd sd.syntax lookup fi !merge_fragments
-      | "twf" -> 
-          System_pp.pp_systemdefn_core_io m_twf sd sd.syntax lookup fi !merge_fragments
-      | "ocaml" -> 
-          System_pp.pp_systemdefn_core_io m_caml (Auxl.caml_rename sd) sd.syntax lookup fi !merge_fragments
+          System_pp.pp_systemdefn_core_io m_lem sd sd.syntax lookup fi !merge_fragments !preserve_structure
+      | "twf" ->
+          System_pp.pp_systemdefn_core_io m_twf sd sd.syntax lookup fi !merge_fragments !preserve_structure
+      | "ocaml" ->
+          System_pp.pp_systemdefn_core_io m_caml (Auxl.caml_rename sd) sd.syntax lookup fi !merge_fragments !preserve_structure
       | "lex" -> 
           Lex_menhir_pp.pp_lex_systemdefn m_lex (Auxl.caml_rename sd) fi
       | "menhir" -> 
