@@ -292,20 +292,19 @@ let options = Arg.align [
   ( "-no_rbcatn", 
     Arg.Bool (fun b -> Substs_pp.no_rbcatn := b),
     "<"^string_of_bool !Substs_pp.no_rbcatn^">      (debug) remove relevant bind clauses" ); 
-  ( "-lem_debug", 
+  ( "-lem_debug",
     Arg.Bool (fun b -> Types.lem_debug := b),
-    "        (debug) print lem debug locations" ); 
+    "        (debug) print lem debug locations" );
+  ( "-quiet",
+    Arg.Set Global_option.quiet,
+    "          Suppress normal output (keep errors/warnings)" );
 ] 
 
-let usage_msg = 
+let usage_msg =
     ("\n"
-     ^ "usage: ott <options> <filename1> .. <filenamen> \n" 
+     ^ "usage: ott <options> <filename1> .. <filenamen> \n"
      ^ "  (use \"OCAMLRUNPARAM=p  ott ...\" to show the ocamlyacc trace)\n"
      ^ "  (ott <options> <filename1> .. <filenamen>    is equivalent to\n   ott -i <filename1> .. -i <filenamen> <options>)\n")
-
-
-
-let _ = print_string ("Ott version "^Version.n^"   distribution of "^Version.d^"\n")
 
 (* Normalize flag names: replace "coq" with "rocq" for backward compatibility *)
 let normalize_flag flag =
@@ -327,7 +326,12 @@ let _ =
   with
   | Arg.Help msg -> print_string msg; exit 0
   | Arg.Bad msg -> print_string msg; exit 2);
-  file_arguments :=  !file_arguments @ !extra_arguments 
+  file_arguments :=  !file_arguments @ !extra_arguments
+
+(* Print version unless in quiet mode *)
+let _ =
+  if not !Global_option.quiet then
+    print_string ("Ott version "^Version.n^"   distribution of "^Version.d^"\n")
 
 let _ = tex_filter_filenames := List.combine (!tex_filter_filename_srcs) (!tex_filter_filename_dsts)
 let _ = hol_filter_filenames := List.combine (!hol_filter_filename_srcs) (!hol_filter_filename_dsts)
@@ -741,7 +745,8 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
             (Types.systemdefn * (string -> bool -> string -> Types.symterm list) * Types.systemdefn * Types.systemdefn))
         [Marshal.Closures];
       close_out fd;
-      print_string ("system definition in file: " ^ s ^ "\n") );
+      if not !Global_option.quiet then
+        print_string ("system definition in file: " ^ s ^ "\n") );
   
   (** dot output of dependencies *)
   ( match !dot_filename_opt with
@@ -751,7 +756,8 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
       output_string fd
         (Grammar_pp.pp_dot_dep_graph pp_ascii_opts_default sd.syntax);
       close_out fd;
-      print_string ("dot version in file: " ^ s ^ "\n") );
+      if not !Global_option.quiet then
+        print_string ("dot version in file: " ^ s ^ "\n") );
 
   (* for each target, compute the o/is informations *)
   let output_details =
@@ -892,7 +898,8 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
 
   if !process_defns then begin
     let bad, msg = Defns.pp_counts sd in
-    print_string msg;
+    if not !Global_option.quiet then
+      print_string msg;
     if bad && !signal_parse_errors then exit 1
   end;
   ()
