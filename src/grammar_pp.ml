@@ -3112,8 +3112,10 @@ and extract_nonterms_deep_ste_list slil =
   ( match slil with
   | [] -> []
   | Stli_single (_,stel)::tl -> (extract_nonterms_deep stel) @ (extract_nonterms_deep_ste_list tl)
-  | Stli_listform hd::tl -> 
-      Auxl.warning (Some hd.stl_loc) "<<internal: extract_nonterms_deep_ste_list not implemented over listforms>>>";
+  | Stli_listform stlb::tl ->
+      (* Intentionally skip nested listforms: their bound variables are quantified
+         by the inner forall/In structure generated during recursive pretty-printing,
+         and any free variables are already quantified at the rule level via de3. *)
       extract_nonterms_deep_ste_list tl )
   
 and extract_nonterms_deep s =
