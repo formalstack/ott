@@ -74,7 +74,8 @@ let de_lex t = match t with
 | LINELINE(s1,s2,s3)   -> Tok_sym_direct (s1^s2^s3, "\\mysym{"^s1^"}"^Auxl.pp_tex_escape_alltt (s2^s3))
 | LINE (s1,s2)         -> Tok_user (s1^s2)
 | BLANKS s             -> Tok_user s
-| EMBED                -> Tok_kw "embed"                        
+| IMPORT               -> Tok_kw "import"
+| EMBED                -> Tok_kw "embed"
 | HOMS                 -> Tok_kw "homs"                         
 | METAVAR              -> Tok_kw "metavar"                      
 | INDEXVAR             -> Tok_kw "indexvar"                     
@@ -241,7 +242,8 @@ rule metalang = parse
   | ("%"[^'\010' '\013']* newline) as lxm    { incr_linenum lexbuf; INTERSTITIAL(lxm) }  
   | ","                            { COMMA }
   | "::="                          { CCE                  }
-  | "|"                            { my_lexer_state := elements; BAR }
+  | "|"                            { if !Global_option.in_import_items then BAR
+                                     else (my_lexer_state := elements; BAR) }
   | "{{"                           { my_lexer_state := hom metalang; DOUBLELEFTBRACE      }
   | "}}"                           { DOUBLERIGHTBRACE     }
   | "::"                           { COLONCOLON           }
@@ -251,6 +253,7 @@ rule metalang = parse
   | "homs"                         { HOMS                 }
   | "metavar"                      { METAVAR              }
   | "indexvar"                     { INDEXVAR             }
+  | "import"                        { IMPORT               }
   | "grammar"                      { RULES                }
   | "subrules"                     { SUBRULES             }
   | "contextrules"                 { CONTEXTRULES         }
@@ -506,7 +509,6 @@ and filter = parse
   | "["  as lxm       { STRING( "[", String.make 1 lxm )        }    
   | "]"  as lxm       { STRING( "]", String.make 1 lxm )        }
   | eof               { EOF                  }
-
 
 
 

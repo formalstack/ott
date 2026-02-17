@@ -1,0 +1,5 @@
+Ott version 0.2026.02.04-formal   distribution of Wed Feb 4 00:32:09 EST 2026
+[1mFile /Users/sbenitez/Sync/Formal/Code/ott/tests/import/negative_nested_scope_validation/dep_collision_bad.ott on line 1, column 7 - line 2, column 6:[0m
+[1m[31mError: [0mImported name 'tm' from module 'base' conflicts with a local declaration.
+Use a rename in the import block to avoid the collision.
+

@@ -1,0 +1,19 @@
+metavar atom, a ::=
+  {{ rocq nat }}
+
+grammar
+pointer, ptr :: 'ptr_' ::=
+  | a   :: :: atom
+
+value, v :: 'val_' ::=
+  | ptr :: :: ptr
+
+defns core :: J ::=
+
+  defn
+    pack ptr ==> v :: :: Pack :: 'Pack'
+  by
+
+  ---------------- :: One
+  pack ptr ==> ptr
+

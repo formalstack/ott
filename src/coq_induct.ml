@@ -97,14 +97,17 @@ let generate_induction m xd ntr_set =
   (* ** Variables ** *)
   (* need a Variable decl for each inductive type appearing in any rule *)
 
-  let rec used_in_tuple e : (string*string*string option) list =
-    ( match e with
-    | Lang_nonterm (ntr_primary,_) -> 
-	let ntr = Auxl.promote_ntr xd ntr_primary in
-	[ (ntr, ntr, None) ]
-    | Lang_metavar (mvr_primary,_) -> 
-	[ (mvr_primary,mvr_primary,None) ] 
-    | _ -> [] ) in
+	  (* For list-tuples we need two representations:
+	     - a stable, unqualified base name for generating Coq identifiers (no dots)
+	     - the Coq type name as printed in this module (qualified if imported) *)
+	  let rec used_in_tuple e : (string*string*string option) list =
+	    ( match e with
+	    | Lang_nonterm (ntr_primary,_) ->
+		let ntr = Auxl.promote_ntr xd ntr_primary in
+		[ (ntr, Grammar_pp.pp_nontermroot_ty m xd ntr, None) ]
+	    | Lang_metavar (mvr_primary,_) ->
+		[ (mvr_primary, Grammar_pp.pp_metavarroot_ty m xd mvr_primary, None) ]
+	    | _ -> [] ) in
   
   let rec inductive_types_used_in_element e : (string*string*(string option)) list = 
     ( match e with
@@ -118,20 +121,25 @@ let generate_induction m xd ntr_set =
     | Lang_terminal _ -> []
     | Lang_option es -> [ "","<<<option unimplemented>>>",None ] 
     | Lang_sugaroption es -> []
-    | Lang_list elb -> 
-	let l = List.flatten (List.map used_in_tuple elb.elb_es) in
-	if List.exists (fun (n,_,_) -> List.mem n (List.map (fun r -> r.rule_ntr_name) rule_set)) l 
-	then
-	  ( match List.length l with
-	  | 0 -> []
-	  | 1 -> [ "list_"^((fun (x,_,_) -> x) (List.hd l)), 
-		   "list "^((fun (_,x,_) -> x) (List.hd l)), 
-		   Some ((fun (_,x,_) -> x) (List.hd l)) ]
-	  | _ -> [ "list_" ^ String.concat "_" (List.map (fun (x,_,_) -> x) l), 
-		   "list (" ^ String.concat "*" (List.map (fun (_,x,_) -> x) l) ^")",
-		   Some (String.concat "*" (List.map (fun (_,x,_) -> x) l)) ] )
-	else [] )
-  in
+	    | Lang_list elb -> 
+		let l = List.flatten (List.map used_in_tuple elb.elb_es) in
+		if List.exists (fun (n,_,_) -> List.mem n (List.map (fun r -> r.rule_ntr_name) rule_set)) l 
+		then
+		  ( match List.length l with
+		  | 0 -> []
+		  | 1 ->
+		      let (id_base, ty_coq, _) = List.hd l in
+		      [ "list_" ^ id_base,
+			"list " ^ ty_coq,
+			Some id_base ]
+		  | _ ->
+		      let id_bases = List.map (fun (x,_,_) -> x) l in
+		      let tys_coq = List.map (fun (_,x,_) -> x) l in
+		      [ "list_" ^ String.concat "_" id_bases,
+			"list (" ^ String.concat "*" tys_coq ^ ")",
+			Some (String.concat "*" id_bases) ] )
+		else [] )
+	  in
   let inductive_types_used_in_prod p =
     if p.prod_meta 
     then []
@@ -226,32 +234,34 @@ let generate_induction m xd ntr_set =
  	!ix end in
     fun s -> intr s in
 
-  let hypothesis_from_list_types = 
-    String.concat "\n"
-      (List.map 
-	 (fun t -> 
-	   let types = Str.split (Str.regexp "(\\|*\\|)") t in (* FZ *)
-	   let vars_types = List.map (fun t -> (t^(string_of_int(make_index t)), t)) types in
-	   let n = String.concat "_" types in
-	   let xl,tl = n^"_l", "list "^(if List.length types = 1 then t else "("^t^")") in
-	   "  (H_list_"^n^"_nil : P_list_"^n^" nil)\n"
-	   ^ "  (H_list_"^n^"_cons : " 
-	   ^ (String.concat "" 
-		(List.map 
-		   (fun (v,t) -> 
-		     "forall ("^v^":"^t^"), " 
-		     ^ (try List.assoc t variables_assoc ^" "^v^" -> " with Not_found -> ""))
-		   vars_types))
-	   ^ "forall ("^xl^":" ^tl^"), "
-	   ^ (try List.assoc tl variables_assoc ^" "^xl^" -> " with Not_found -> "")
-	   ^ (try List.assoc tl variables_assoc ^" (cons "
-	     ^ (if List.length types = 1 
-	     then fst (List.hd vars_types) 
-	     else "("^(String.concat "," (List.map fst vars_types))^")")
-	     ^" "^xl^")" with Not_found -> "<<>>" )
-	   ^")" )  
-	 list_types_used)
-  in
+	  let hypothesis_from_list_types = 
+	    String.concat "\n"
+	      (List.map 
+		 (fun t -> 
+		   let types = Str.split (Str.regexp "(\\|*\\|)") t in (* FZ *)
+		   let vars_types = List.map (fun t -> (t^(string_of_int(make_index t)), t)) types in
+		   let n = String.concat "_" types in
+		   let t_coq = Grammar_pp.qualify_idents_in_string m xd.xd_imports t in
+		   let xl,tl = n^"_l", "list "^(if List.length types = 1 then t_coq else "("^t_coq^")") in
+		   "  (H_list_"^n^"_nil : P_list_"^n^" nil)\n"
+		   ^ "  (H_list_"^n^"_cons : " 
+		   ^ (String.concat "" 
+			(List.map 
+			   (fun (v,t) -> 
+			     let t_coq = Grammar_pp.qualify_name m xd.xd_imports t in
+			     "forall ("^v^":"^t_coq^"), " 
+			     ^ (try List.assoc t_coq variables_assoc ^" "^v^" -> " with Not_found -> ""))
+			   vars_types))
+		   ^ "forall ("^xl^":" ^tl^"), "
+		   ^ (try List.assoc tl variables_assoc ^" "^xl^" -> " with Not_found -> "")
+		   ^ (try List.assoc tl variables_assoc ^" (cons "
+		     ^ (if List.length types = 1 
+		     then fst (List.hd vars_types) 
+		     else "("^(String.concat "," (List.map fst vars_types))^")")
+		     ^" "^xl^")" with Not_found -> "<<>>" )
+		   ^")" )  
+		 list_types_used)
+	  in
   
   let hypothesis_declaration = 
     "Hypothesis\n  "
@@ -302,34 +312,38 @@ let generate_induction m xd ntr_set =
 (* 						   ^(String.concat "\n * "  *)
 (* 						       (List.map (fun (v,t) -> v^"="^t) variables_assoc))); *)
 
-				  Some
-				    ( "(((fix "^name_l^" ("^l_arg^":"^t^") : " 
-				      ^ (List.assoc t variables_assoc) ^ " "^l_arg^" := "  (* FZ freshen xl *)
-				      ^ "match "^l_arg^" as x return "^(List.assoc t variables_assoc) ^ " x with "
-				      ^ "nil => H_list_"^n^"_nil" 
-				      ^ ( " | cons "
-					  ^ (if List.length types = 1 
-					  then fst (List.hd vars_types) 
-					  else "("^(String.concat "," (List.map fst vars_types))^")") 
-					  ^ " xl" ^ " =>" ) 
-				      ^ " H_list_"^n^"_cons " 
-				      ^ (String.concat " " 
-					   (List.map 
-					      (fun (v,t) ->
-						v 
-						^ (if List.mem t (List.map (fun r -> r.rule_ntr_name) rule_set)
-						then "("^t^"_ott_ind "^v^")" 
-						else " "))
-					      vars_types))
-(*						" x "  ^ (try "("^n^"_ott_ind x) " with Not_found -> "") ) *)
-
-				      ^ "xl ("^name_l^" xl) "
-				      ^ "end)) "^v^")"
-				     )
-				else None
-			    | None ->
-				(* nonterm recursion *)
-				if List.mem t (List.map (fun r -> r.rule_ntr_name) rule_set)
+					(match List.assoc_opt t variables_assoc with
+					 | None ->
+					     (* Be robust: if the list-type predicate wasn't generated, skip
+					        list recursion rather than crashing the whole run. *)
+					     None
+					 | Some ind_pred ->
+					     Some
+					       ( "(((fix "^name_l^" ("^l_arg^":"^t^") : "
+						 ^ ind_pred ^ " "^l_arg^" := "  (* FZ freshen xl *)
+						 ^ "match "^l_arg^" as x return " ^ ind_pred ^ " x with "
+						 ^ "nil => H_list_"^n^"_nil"
+						 ^ ( " | cons "
+						     ^ (if List.length types = 1
+						        then fst (List.hd vars_types)
+						        else "("^(String.concat "," (List.map fst vars_types))^")")
+						     ^ " xl" ^ " =>" )
+						 ^ " H_list_"^n^"_cons "
+						 ^ (String.concat " "
+						      (List.map
+						         (fun (v,t) ->
+						           v
+						           ^ (if List.mem t (List.map (fun r -> r.rule_ntr_name) rule_set)
+						              then "("^t^"_ott_ind "^v^")"
+						              else " "))
+						         vars_types))
+						 ^ "xl ("^name_l^" xl) "
+						 ^ "end)) "^v^")"
+					       ))
+					else None
+				    | None ->
+					(* nonterm recursion *)
+					if List.mem t (List.map (fun r -> r.rule_ntr_name) rule_set)
 				then Some ("("^t^"_ott_ind "^v^")")
 				else None ) ])
 			var_list)) in

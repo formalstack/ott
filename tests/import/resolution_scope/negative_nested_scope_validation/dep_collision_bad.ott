@@ -1,0 +1,6 @@
+import base ::=
+  | tm
+
+grammar
+tm :: 'LocalTm_' ::=
+  | 'd' :: :: local

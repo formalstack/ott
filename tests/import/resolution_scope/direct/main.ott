@@ -1,0 +1,17 @@
+metavar termvar, x ::=
+  {{ rocq nat }} {{ tex \mathit{[[termvar]]} }}
+
+grammar
+expr, e :: 'Expr_' ::=
+  | x             :: :: var
+  | \ x . expr    :: :: abs
+  | expr1 expr2   :: :: app
+  | value         :: :: imported_val
+  | coercion      :: :: imported_cast
+
+import lib ::=
+{{ rocq Lib }}
+{{ tex \input{lib} }}
+  | value
+  | cast :: coercion
+

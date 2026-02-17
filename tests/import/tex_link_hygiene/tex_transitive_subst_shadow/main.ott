@@ -1,0 +1,14 @@
+import dep ::=
+  | x
+  | store_ok
+
+grammar
+
+expr, e :: 'MainExpr_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+place, p :: 'MainPlace_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+subrules
+  p <:: e

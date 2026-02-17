@@ -63,17 +63,10 @@ simple: regression
 	./regression  -todo_list -todo_list_file regression-small.otl -keep_temp
 
 clean:
-	rm -rf *~
-	rm -rf regression
-	rm -rf testRegr*
-	rm -rf .testRegr*
-	rm -rf ._ott_coqrc.aux
-	rm -rf _ott_coqrc.glob
+	rm -rf *~ regression testRegr* .testRegr* ._ott_coqrc.aux _ott_coqrc.glob a.out
 
 clean-regr:
-	rm -rf testRegr*
-	rm -rf *~
-	rm -f regression-jenkins tests.xml
+	rm -rf testRegr* rm  *~ rm regression-jenkins tests.xml
 
 # Jenkins
 

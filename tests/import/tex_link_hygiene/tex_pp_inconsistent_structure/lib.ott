@@ -1,0 +1,18 @@
+metavar ident, a, b ::=
+  {{ lex alphanum }}
+  {{ rocq string }}
+
+grammar
+
+ctx :: '' ::=
+  | a b :: :: ctxt
+
+defns
+Lib :: '' ::=
+
+defn
+ctx ok :: :: ctx_ok :: ctx_ok_ by
+
+----------- :: ok
+a b ok
+

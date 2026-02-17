@@ -1,0 +1,22 @@
+metavar typevar, X ::=
+  {{ rocq nat }} {{ tex \mathit{[[typevar]]} }}
+
+metavar termvar, x ::=
+  {{ rocq nat }} {{ tex \mathit{[[termvar]]} }}
+
+grammar
+ty :: 'Ty_' ::=
+  | X            :: :: var
+  | ty1 -> ty2   :: :: arrow
+
+value, v :: 'Val_' ::=
+  | \ x . tm     :: :: abs
+
+cast :: 'Cast_' ::=
+  | < ty > value  :: :: coerce
+
+tm :: 'LTm_' ::=
+  | value         :: :: val
+  | cast          :: :: cast
+  | tm1 tm2       :: :: app
+

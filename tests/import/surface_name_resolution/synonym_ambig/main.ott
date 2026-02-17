@@ -1,0 +1,8 @@
+import lib ::= {{ rocq Lib }}
+  | E
+
+grammar
+
+use, u :: 'use_' ::= {{ menhir-suppress }}
+  | E :: :: from_lib
+

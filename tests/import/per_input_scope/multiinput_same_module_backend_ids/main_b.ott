@@ -1,0 +1,7 @@
+import lib ::=
+{{ rocq LibB }}
+  | tm
+
+grammar
+b_tm :: 'BTm_' ::=
+  | tm :: :: imported_b

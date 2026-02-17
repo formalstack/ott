@@ -1,0 +1,23 @@
+import lib ::=
+{{ rocq Lib }}
+  | M
+  | Store
+
+indexvar index, i, n ::=
+  {{ lex numeral }}
+  {{ rocq nat }}
+
+grammar
+
+value, v :: 'Val_' ::= {{ menhir-suppress }}
+  | wrap ( v1 .. vn ) :: :: wrap
+
+defns
+Main :: '' ::=
+
+defn
+use ( wrap ( v1 .. vn ) ) :: :: Use :: Use_ by
+
+store M <- v1 .. vn
+---------------------- :: ok
+use ( wrap ( v1 .. vn ) )

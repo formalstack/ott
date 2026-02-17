@@ -1,0 +1,4 @@
+import dep ::=
+  | Dep :: Dep_i
+  | i
+  | store_ok :: store_ok_i

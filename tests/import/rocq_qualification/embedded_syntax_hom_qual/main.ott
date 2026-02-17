@@ -1,0 +1,11 @@
+import lib ::= {{ rocq Lib }}
+  | ty
+
+embed {{ rocq
+Definition sz (t : Lib.ty) : nat :=
+  match t with
+  | [[unit]] => 0
+  | _ => 1
+  end.
+}}
+

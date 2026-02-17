@@ -1,0 +1,13 @@
+grammar
+
+place, p :: 'DepPlace_' ::=
+  | unit :: :: unit
+
+defns
+J :: '' ::=
+
+defn
+store <- place :: :: store :: store_ by
+
+----------- :: ok
+store <- place

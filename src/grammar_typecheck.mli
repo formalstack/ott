@@ -40,13 +40,14 @@ val cd_hom :
   Types.element list -> Types.raw_homomorphism -> Types.homomorphism
 
 val check_and_disambiguate :
-  Types.pp_mode -> 
+  Types.pp_mode ->
   bool ->
   bool ->
   Types.hom_name list ->
   string list ->
   bool ->
   bool ->  (* skip_subrule_validation parameter *)
+  Types.import_context ->
   Types.raw_item list list -> Types.syntaxdefn * Types.structure * Types.raw_fun_or_reln_defnclass list
 
 val check_with_parser :

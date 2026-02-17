@@ -1,0 +1,10 @@
+indexvar index, i ::=
+  {{ lex numeral }}
+  {{ rocq nat }}
+
+grammar
+
+ty, t :: 'ty_' ::= {{ menhir-suppress }}
+  | unit :: S :: unit {{ rocq (let ty := ty_prod nil in ty) }}
+  | prod ( </ ti // i /> ) ::   :: prod
+

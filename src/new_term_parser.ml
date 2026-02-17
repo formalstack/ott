@@ -610,6 +610,22 @@ let build_grammar (xd : syntaxdefn)
            Hashtbl.add prodname_to_index2 p.prod_name (index, index2)
   in
 
+  let is_internal_ntr (ntr : string) : bool =
+    let pref = "__ott_trans_" in
+    let ln = String.length ntr and lp = String.length pref in
+    ln >= lp && String.sub ntr 0 lp = pref
+  in
+
+  let uninternalize_ntr (ntr : string) : string =
+    if not (is_internal_ntr ntr) then ntr
+    else
+      (* "__ott_trans_" ^ <8-hex> ^ "_" ^ <orig> *)
+      let pref = "__ott_trans_" in
+      let lp = String.length pref in
+      if String.length ntr <= lp + 9 then ntr
+      else String.sub ntr (lp + 9) (String.length ntr - (lp + 9))
+  in
+
   (* Orig_nt : Res_st *)
   let process_rule (r : rule) : unit =
     let ntr = r.rule_ntr_name in
@@ -638,6 +654,23 @@ let build_grammar (xd : syntaxdefn)
              (fun [_; Res_sil l] ->
                 Res_st (St_nonterm (dummy_loc, ntr, (nt', l)))))
         (ntr_synonyms r.rule_ntr_name);
+      (* When import-time internalization rewrites transitive-only nonterm roots
+         (e.g. "v" -> "__ott_trans_<tag>_v"), we must still accept the original
+         surface names in user-written terms like "v1..vn". Add alias
+         productions that parse the *original* synonym but construct the
+         internalized nonterm node. *)
+      if is_internal_ntr ntr then
+        List.iter
+          (fun nt' ->
+             if is_internal_ntr nt' then
+               let orig = uninternalize_ntr nt' in
+               if orig <> nt' then
+                 add_prod
+                   nt
+                   (mkNT Nt.whitespace :: string_to_terms orig @ [mkNT Nt.suffix])
+                   (fun [_; Res_sil l] ->
+                      Res_st (St_nonterm (dummy_loc, ntr, (nt', l)))))
+          (ntr_synonyms r.rule_ntr_name);
       (* productions for mentioning the nonterminal name of subrules *)
       List.iter 
         (fun ntl -> 

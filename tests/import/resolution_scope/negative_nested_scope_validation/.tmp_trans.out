@@ -1,0 +1,6 @@
+Ott version 0.2026.02.04-formal   distribution of Wed Feb 4 00:32:09 EST 2026
+[1mFile /Users/sbenitez/Sync/Formal/Code/ott/tests/import/negative_nested_scope_validation/dep_transitive_bad.ott on line 5, column 0 - line 6, column 23:[0m
+[1m[31mError: [0mIllegal reference to imported name 'cast'.
+This name is only available transitively via imports.
+If you want to use it, add it explicitly to an import block.
+

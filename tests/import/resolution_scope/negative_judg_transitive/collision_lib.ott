@@ -1,0 +1,19 @@
+metavar nat_var, n ::=
+  {{ rocq nat }}
+
+grammar
+value :: 'LibVal_' ::=
+  | n :: :: num
+
+container :: 'Container_' ::=
+  | [ value ] :: :: wrap
+
+defns
+Jwrap :: '' ::=
+
+defn
+container ok :: :: wrap_ok :: wrap_ok_ by
+
+---------- :: triv
+container ok
+

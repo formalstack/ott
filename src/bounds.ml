@@ -331,10 +331,16 @@ let rec merge_nobound : ((nt_or_mv*subntr_data) * bound) list -> (nt_or_mv*subnt
 let dotenv1 m xd x : dotenv1 = 
   List.map 
     (function (bound,ntmvsns) ->
-      let pp1 = 
-	(List.map 
-	   (function (ntmv,subntr_data) -> 
-	     Grammar_pp.pp_nt_or_mv_with_sie m xd sie_project ntmv) ntmvsns) in
+      let pp1 =
+        (* Coq (and some other backends) reject patterns that bind the same
+           variable name multiple times, e.g. "(v_, v_)". Ensure local pattern
+           binders are distinct, while keeping first occurrences unchanged. *)
+        Auxl.ensure_unique_names
+          (List.map
+             (function (ntmv,subntr_data) ->
+               Grammar_pp.pp_nt_or_mv_with_sie m xd sie_project ntmv)
+             ntmvsns)
+      in
       let pp1_null = 
 	(List.map 
 	   (function (ntmv,subntr_data) -> 
@@ -438,4 +444,3 @@ let bound_extraction m xd loc sts : dotenv * dotenv3 * string =
     Bounds (_, s') -> raise (Bounds (loc, s'))
 (*  with e ->  *)
  (*   "exception in bound_extraction" *)
-

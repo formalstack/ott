@@ -89,6 +89,7 @@ let make_rules_items prefix rules =
 %token DOTDOTDOT
 %token DOTDOTDOTDOT
 %token EMBED
+%token IMPORT
 %token METAVAR INDEXVAR
 %token RULES
 %token SUBRULES
@@ -170,6 +171,7 @@ item:
  | ROCQSECTIONBEGIN coq_section_begin { [$2] }
  | ROCQSECTIONEND coq_section_end     { [$2] }
  | ROCQVARIABLE coq_variable          { [$2] }
+ | IMPORT import_block                { [$2] }
 
 metavardefn:
    metavardefn_int   
@@ -609,11 +611,32 @@ coq_section_end:
        Raw_item_coq_section raw_rqs }
 
 coq_variable:
-  STRING 
+  STRING
      { let raw_rqv = { raw_rqv_name=(fst $1); raw_rqv_loc=mkl() } in
        Raw_item_coq_variable raw_rqv }
 
- 
+import_block:
+   ident_desc CCE start_import_items homomorphism_list import_item_list
+     { Global_option.in_import_items := false;
+       Raw_item_import {
+         rid_module = $1;
+         rid_homs = $4;
+         rid_items = $5;
+         rid_loc = mkl() } }
+
+start_import_items:
+   /* empty */
+     { Global_option.in_import_items := true }
+
+import_item_list:
+   /* empty */                     { [] }
+ | import_item import_item_list    { $1 :: $2 }
+
+import_item:
+   BAR ident_desc COLONCOLON ident_desc
+     { { rii_name = $2; rii_rename = Some $4; rii_loc = mkl() } }
+ | BAR ident_desc
+     { { rii_name = $2; rii_rename = None; rii_loc = mkl() } }
 
 unfiltered_spec_el_list:
    /* empty */                    { [] }

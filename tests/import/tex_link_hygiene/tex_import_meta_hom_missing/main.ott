@@ -1,0 +1,7 @@
+import dep ::=
+  | t
+
+grammar
+main :: 'main_' ::=
+  | t  :: :: use_t
+

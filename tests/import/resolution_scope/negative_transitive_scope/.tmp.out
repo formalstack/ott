@@ -1,0 +1,6 @@
+Ott version 0.2026.02.04-formal   distribution of Wed Feb 4 00:32:09 EST 2026
+[1mFile transitive_scope_bad.ott on line 7, column 0 - line 8, column 20:[0m
+[1m[31mError: [0mIllegal reference to imported name 'ty'.
+This name is only available transitively via imports.
+If you want to use it, add it explicitly to an import block.
+

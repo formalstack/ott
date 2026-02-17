@@ -290,6 +290,27 @@ let mvd_of_mvr (xd:syntaxdefn) (mvr:metavarroot) : metavardefn =
 let mvd_of_mvr_nonprimary (xd:syntaxdefn) (mvr:metavarroot) : metavardefn =
   List.find (fun mvd -> has_assoc mvr mvd.mvd_names) xd.xd_mds
 
+let import_binding_of_name (xd:syntaxdefn) (name:string) : binding_info option =
+  Hashtbl.find_opt xd.xd_imports.ic_binding_info_by_local_name name
+
+let display_import_name (xd:syntaxdefn) (name:string) : string =
+  match import_binding_of_name xd name with
+  | Some binding -> binding.bi_origin_name
+  | None ->
+      match Import_naming.surface_of_internal_token name with
+      | Some surface -> surface
+      | None -> name
+
+let is_transitive_hidden_import_name (xd:syntaxdefn) (name:string) : bool =
+  match import_binding_of_name xd name with
+  | Some binding -> binding.bi_visibility = Import_binding_transitive_hidden
+  | None -> Import_naming.is_internal_transitive name
+
+let visible_imported_mvd_of_mvr_nonprimary (xd:syntaxdefn) (mvr:metavarroot)
+  : metavardefn option =
+  if is_transitive_hidden_import_name xd mvr then None
+  else Some (mvd_of_mvr_nonprimary xd mvr)
+
 let rule_of_ntr (xd:syntaxdefn) (ntr:nontermroot) : rule = 
   let rec search_ntr ntr rs = match rs with
     | [] -> raise Not_found
@@ -303,6 +324,11 @@ let rule_of_ntr_nonprimary (xd:syntaxdefn) (ntr:nontermroot) : rule =
     | r::_ when has_assoc ntr r.rule_ntr_names -> r
     | _::rs -> search_ntr2 ntr rs in
   search_ntr2 ntr xd.xd_rs 
+
+let visible_imported_rule_of_ntr_nonprimary (xd:syntaxdefn) (ntr:nontermroot)
+  : rule option =
+  if is_transitive_hidden_import_name xd ntr then None
+  else Some (rule_of_ntr_nonprimary xd ntr)
 
 let prod_of_prodname ?(warn=true) (xd:syntaxdefn) (pn:prodname) : prod = 
   let r = 
@@ -791,16 +817,37 @@ let string_remove_suffix s s' =
     else
       Some s1
 
-let string_is_prefix s s' =
-  let l = String.length s in
-  let l' = String.length s' in
-  if l'<l then false
-  else
-    (s = String.sub s' 0 l)
+	let string_is_prefix s s' =
+	  let l = String.length s in
+	  let l' = String.length s' in
+	  if l'<l then false
+	  else
+	    (s = String.sub s' 0 l)
 
+	(* -------------------------------------------------------------------------- *)
+	(* Ott identifier tokenization within plain strings                            *)
+	(* -------------------------------------------------------------------------- *)
 
+	let ott_ident_regexp : Str.regexp = Str.regexp "[a-zA-Z_][a-zA-Z_0-9']*"
 
-(* list functions *)
+	let ott_ident_full_split (s : string) : Str.split_result list =
+	  Str.full_split ott_ident_regexp s
+
+	let ott_ident_tokens_in_string (s : string) : string list =
+	  List.filter_map (function
+	    | Str.Delim w -> Some w
+	    | Str.Text _ -> None
+	  ) (ott_ident_full_split s)
+
+	let map_ott_idents_in_string (f : string -> string) (s : string) : string =
+	  let b = Buffer.create (String.length s) in
+	  List.iter (function
+	    | Str.Text t -> Buffer.add_string b t
+	    | Str.Delim w -> Buffer.add_string b (f w)
+	  ) (ott_ident_full_split s);
+	  Buffer.contents b
+
+	(* list functions *)
 
 let rec transpose (m: 'a list list) : 'a list list =
   match m with
@@ -1198,6 +1245,7 @@ and rename_syntaxdefn map xd =
       xd_embed = xd.xd_embed;
       xd_isa_imports = xd.xd_isa_imports;
       xd_pas = rename_parsing_annotations map xd.xd_pas;
+      xd_imports = xd.xd_imports;
 }
 
 and rename_defnclass map dc =
@@ -1317,14 +1365,16 @@ let avoid xd mvs0 nts0 =
   (* if there is one with a primary indexvar, as they cannot be freshened *)
   let mvs2 = option_map
       (function ((mvr,suff) as mv) -> 
-        let mvd = mvd_of_mvr_nonprimary xd mvr in
-        match mvd.mvd_indexvar with
-        | true ->
-            if mvr=mvd.mvd_name then 
-              warning None ("warning: indexvar \""^mvr^"\" is primary so may give a name-clash\n") ;
-            None
-        | false ->
-            if mvr=mvd.mvd_name then Some mv else None
+        match visible_imported_mvd_of_mvr_nonprimary xd mvr with
+        | None -> None
+        | Some mvd ->
+            match mvd.mvd_indexvar with
+            | true ->
+                if mvr=mvd.mvd_name then 
+                  warning None ("warning: indexvar \""^display_import_name xd mvr^"\" is primary so may give a name-clash\n") ;
+                None
+            | false ->
+                if mvr=mvd.mvd_name then Some mv else None
       ) mvs1 in
             
   (* for each such, if there is one with an empty suffix, generate a new suffix that is *)
@@ -1348,9 +1398,11 @@ let avoid xd mvs0 nts0 =
   let nts1 = remove_duplicates nts0 in
 
   (* consider only nts with primary ntrs *)
-  let primary_ntrs = List.map (function r -> r.rule_ntr_name) xd.xd_rs in
   let nts2 = List.filter 
-      (function (ntr,suff) -> List.mem ntr primary_ntrs) nts1 in
+      (function (ntr,suff) ->
+        match visible_imported_rule_of_ntr_nonprimary xd ntr with
+        | Some r -> ntr = r.rule_ntr_name
+        | None -> false) nts1 in
             
   (* for each such, if there is one with an empty suffix, generate a new suffix that is *)
   (* fresh amongst all the suffixes of nts with the same root *)
@@ -1402,14 +1454,16 @@ let secondaryify xd mvs0 nts0 =
   (* if there is one with a primary indexvar, as they cannot be freshened *)
   let mvs2 = option_map
       (function ((mvr,suff) as mv) -> 
-        let mvd = mvd_of_mvr_nonprimary xd mvr in
-        match mvd.mvd_indexvar with
-        | true ->
-            if mvr=mvd.mvd_name then 
-              warning None ("indexvar \""^mvr^"\" is primary so may give a name-clash\n") ;
-            Some mv
-        | false ->
-            Some mv
+        match visible_imported_mvd_of_mvr_nonprimary xd mvr with
+        | None -> None
+        | Some mvd ->
+            match mvd.mvd_indexvar with
+            | true ->
+                if mvr=mvd.mvd_name then 
+                  warning None ("indexvar \""^display_import_name xd mvr^"\" is primary so may give a name-clash\n") ;
+                Some mv
+            | false ->
+                Some mv
       ) mvs1 in
             
   let rec mv_map acc mvs = match mvs with
@@ -1423,7 +1477,14 @@ let secondaryify xd mvs0 nts0 =
       mv_map ((mv,mv'')::acc) mvs' in
 
   (* and now for nonterminals *)
-  let nts2 = remove_duplicates nts0 in
+  let nts2 =
+    List.filter
+      (function (ntr,_suff) ->
+        match visible_imported_rule_of_ntr_nonprimary xd ntr with
+        | Some _ -> true
+        | None -> false)
+      (remove_duplicates nts0)
+  in
 
   let rec nt_map acc nts = match nts with
   | [] -> acc

@@ -1,0 +1,8 @@
+import lib ::=
+{{ rocq Lib }}
+  | ty
+
+embed {{ rocq
+Definition u : Lib.ty := [[unit]].
+}}
+

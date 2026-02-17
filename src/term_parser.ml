@@ -971,18 +971,96 @@ imperatively.*)
              p'''] in
 
   
-  (* parsers for the symbolic nonterms associated with a rule *)
+	  (* parsers for the symbolic nonterms associated with a rule *)
 
-  let parsers_for_symbolic_nonterm : nontermroot -> (char,symterm) parser list
-        = function ntrp ->
-          Auxl.debug ("foo: "^ntrp^"\n");
-          [(parse_map (function  ntr,suff -> St_nonterm(dummy_loc,ntrp,(ntr,suff)))
-             (parse_pre_whitespace
-                (parse_with_suffix all_indexvar_synonyms (ntr_synonyms ntrp))))] in
+	  let parsers_for_symbolic_nonterm : nontermroot -> (char,symterm) parser list
+	        = function ntrp ->
+	          Auxl.debug ("foo: "^ntrp^"\n");
+	          let p_synonyms =
+	            (parse_map (function  ntr,suff -> St_nonterm(dummy_loc,ntrp,(ntr,suff)))
+	               (parse_pre_whitespace
+	                  (parse_with_suffix all_indexvar_synonyms (ntr_synonyms ntrp))))
+	          in
+	          (* Principled hygiene for imported/transitive categories:
+	             allow arbitrary variable names (with Ott suffix syntax) to stand
+	             for a symbolic term of the expected nonterminal category, even if
+	             the variable root is not listed as a synonym of that category.
+
+	             This is crucial when import resolution internalizes transitive
+	             dependencies (e.g. Metal.value) to avoid name clashes: the
+	             *category* name changes, but the user should still be able to
+	             write metavariables like [v1..vn] as names, with the type
+	             determined by context.
+	           *)
+	          let is_internal_ntr (ntr : string) : bool =
+	            let pref = "__ott_trans_" in
+	            let ln = String.length ntr and lp = String.length pref in
+	            ln >= lp && String.sub ntr 0 lp = pref
+	          in
+	          let split_ident_suffix (indexvars : string list) (s : string)
+	            : (string * suffix) =
+	            let len = String.length s in
+	            let indexvars_by_len =
+	              List.sort
+	                (fun a b ->
+	                  let la = String.length a and lb = String.length b in
+	                  let c = compare lb la in
+	                  if c <> 0 then c else compare a b)
+	                indexvars
+	            in
+	            let rec loop j acc =
+	              if j <= 0 then (0, acc)
+	              else
+	                let c = s.[j - 1] in
+	                if c >= '0' && c <= '9' then begin
+	                  let k = ref (j - 1) in
+	                  while !k > 0 && s.[!k - 1] >= '0' && s.[!k - 1] <= '9' do
+	                    decr k
+	                  done;
+	                  let digits = String.sub s !k (j - !k) in
+	                  loop !k (Si_num digits :: acc)
+	                end else if Auxl.issuffixpunct c then
+	                  loop (j - 1) (Si_punct (String.make 1 c) :: acc)
+	                else begin
+	                  let has_minus1 =
+	                    j >= 2 && s.[j - 2] = '-' && s.[j - 1] = '1'
+	                  in
+	                  let j_iv_end = if has_minus1 then j - 2 else j in
+	                  let rec find_iv = function
+	                    | [] -> None
+	                    | iv :: rest ->
+	                      let liv = String.length iv in
+	                      if j_iv_end >= liv
+	                         && String.sub s (j_iv_end - liv) liv = iv
+	                      then Some (iv, j_iv_end - liv)
+	                      else find_iv rest
+	                  in
+	                  match find_iv indexvars_by_len with
+	                  | None -> (j, acc)
+	                  | Some (iv, j') ->
+	                    let off = if has_minus1 then -1 else 0 in
+	                    loop j' (Si_var (iv, off) :: acc)
+	                end
+	            in
+	            let j, suff = loop len [] in
+	            if j = 0 then (s, [])
+	            else (String.sub s 0 j, suff)
+	          in
+	          let p_free_var =
+	            if not (is_internal_ntr ntrp) then []
+	            else
+	              [parse_map
+	                 (fun ident ->
+	                   let root, suff = split_ident_suffix all_indexvar_synonyms ident in
+	                   St_nonterm (dummy_loc, ntrp, (root, suff)))
+	                 (parse_pre_whitespace parse_alphanum)]
+	          in
+	          (p_synonyms :: p_free_var)
+          in
 
 
-
-  (* parsers for the symbolic nonterms for proper subrules of a rule *)
+	
+	  (* parsers for the symbolic nonterms for proper subrules of a rule *)
 
   let parsers_for_symbolic_nonterm_sub : nontermroot -> (char,symterm) parser list
         = function ntrp->
@@ -1238,4 +1316,3 @@ let test_parse (m: pp_mode) (xd: syntaxdefn) (ntr: nontermroot)
   | _ ->  print_string (
         (String.concat "\n" (List.map (Grammar_pp.pp_symterm m xd [] de_empty) sts)^"\n")
        ^ (String.concat "\n" (List.map (Grammar_pp.pp_plain_symterm) sts)^"\n"))
-

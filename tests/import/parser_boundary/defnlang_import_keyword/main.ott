@@ -1,0 +1,26 @@
+grammar
+cmd :: 'Cmd_' ::= {{ menhir-suppress }}
+  | import :: :: import_kw
+  | stay :: :: stay_kw
+
+answer :: 'Ans_' ::= {{ menhir-suppress }}
+  | imported :: :: imported_kw
+  | stayed :: :: stayed_kw
+
+defns
+Jcmd :: '' ::=
+
+defn
+cmd :: :: cmd_ok :: cmd_ok_ by
+
+---------- :: import_rule
+import
+
+funs
+Fcmd ::=
+
+fun
+cmd :: answer :: normalize by
+
+import === imported
+stay === stayed

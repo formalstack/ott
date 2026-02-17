@@ -1,0 +1,13 @@
+import ambig_dep ::=
+  | use
+
+defns
+Main :: '' ::=
+
+defn
+go :: :: go :: go_ by
+
+use
+----- :: ok
+go
+

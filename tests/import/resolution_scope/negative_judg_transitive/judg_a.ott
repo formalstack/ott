@@ -1,0 +1,14 @@
+import collision_lib ::=
+{{ rocq Collision_lib }}
+  | container
+  | Jwrap
+
+defns
+Jfoo :: '' ::=
+
+defn
+container foo :: :: foo_ok :: foo_ok_ {{ tex Jwrap }} by
+
+---------- :: triv
+container foo
+

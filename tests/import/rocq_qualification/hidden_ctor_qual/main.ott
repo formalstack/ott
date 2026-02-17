@@ -1,0 +1,14 @@
+import lib ::=
+{{ rocq Lib }}
+  | pointer
+  | Pack
+
+defns Main :: U ::=
+
+  defn
+    use ptr :: :: Use :: 'Use'
+  by
+
+  pack ptr ==> ptr
+  ---------------- :: One
+  use ptr

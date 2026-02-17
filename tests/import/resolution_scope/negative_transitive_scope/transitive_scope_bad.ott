@@ -1,0 +1,9 @@
+import dep_a ::=
+{{ rocq Dep_a }}
+  | tm
+  | value
+
+grammar
+expr :: 'Expr_' ::=
+  | ty :: :: uses_ty
+

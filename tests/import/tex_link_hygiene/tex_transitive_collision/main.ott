@@ -1,0 +1,7 @@
+import dep ::=
+  | store
+
+grammar
+
+place, p :: 'MainPlace_' ::=
+  | atom :: :: atom

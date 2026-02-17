@@ -1,0 +1,16 @@
+metavar termvar, x ::=
+  {{ rocq nat }}
+
+import base ::=
+{{ rocq Base }}
+  | ty
+
+grammar
+value, v :: 'Val_' ::=
+  | \ x : ty . value   :: :: abs
+
+tm :: 'Tm_' ::=
+  | x              :: :: var
+  | value          :: :: val
+  | tm1 tm2        :: :: app
+

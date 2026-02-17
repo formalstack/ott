@@ -1,0 +1,4 @@
+import libb ::=
+{{ rocq LibB }}
+  | b_nt
+

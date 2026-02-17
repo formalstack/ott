@@ -1,0 +1,23 @@
+import lib ::=
+  | ctx_ok
+
+import other ::=
+  | other_ok
+
+metavar ident, a, b ::=
+  {{ lex alphanum }}
+  {{ rocq string }}
+
+grammar
+
+ctx :: '' ::=
+  | a :: :: ctxt
+
+defns
+Main :: '' ::=
+
+defn
+main :: :: main :: main_ by
+
+---------- :: ok
+main

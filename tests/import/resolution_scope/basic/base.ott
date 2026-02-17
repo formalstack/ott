@@ -1,0 +1,8 @@
+metavar typevar, X ::=
+  {{ rocq nat }}
+
+grammar
+ty :: 'Ty_' ::=
+  | X            :: :: var
+  | ty1 -> ty2   :: :: arrow
+

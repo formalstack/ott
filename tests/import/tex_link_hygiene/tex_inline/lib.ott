@@ -1,0 +1,40 @@
+import dep ::=
+  | G
+
+indexvar index, i, n ::=
+  {{ lex numeral }}
+  {{ rocq nat }}
+
+grammar
+
+value, v :: 'Val_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+defns
+Mem :: '' ::=
+
+defn
+helper :: :: helper :: helper_ by
+
+------------ :: ok
+helper
+
+defn
+gamma G :: :: gamma :: gamma_ by
+
+----- :: gamma_ok
+gamma G
+
+defn
+store <- value :: :: store :: store_ by
+
+helper
+gamma G
+---------------- :: ok
+store <- value
+
+defn
+skip :: :: skip :: skip_ by
+
+------------ :: ok
+skip

@@ -1,0 +1,14 @@
+import dep_a ::=
+{{ rocq Dep_a }}
+  | tm
+  | value
+
+import dep_b ::=
+{{ rocq Dep_b }}
+  | pty
+
+grammar
+expr, e :: 'Expr_' ::=
+  | tm              :: :: term
+  | ( pty ) expr    :: :: annot
+

@@ -1,0 +1,17 @@
+metavar ident, x ::= {{ lex alphanum }}
+
+defns
+Dep :: '' ::=
+
+defn
+a :: :: a :: a_ by
+
+b x
+---------- :: ok
+a
+
+defn
+b x :: :: b :: b_ by
+
+---------- :: ok
+b x

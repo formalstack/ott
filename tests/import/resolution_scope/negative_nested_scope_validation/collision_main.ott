@@ -1,0 +1,2 @@
+import dep_collision_bad ::=
+  | tm

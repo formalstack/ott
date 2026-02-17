@@ -400,6 +400,58 @@ and pp_raw_item ri =
   | Raw_item_hs raw_hs -> "TODO: raw hom section"
   | Raw_item_coq_variable _ -> "TODO: coq variable"
   | Raw_item_coq_section _ -> "TODO: coq section"
+  | Raw_item_import rid ->
+      "import " ^ rid.rid_module ^ " ::=\n"
+      ^ String.concat "\n"
+          (List.map
+             (fun rii ->
+               "  | " ^ rii.rii_name
+               ^ (match rii.rii_rename with None -> "" | Some r -> " :: " ^ r))
+             rid.rid_items)
+      ^ "\n"
+
+and pp_raw_syntaxdef xd =
+  String.concat "" (List.map pp_raw_metavardefn xd.raw_sd_mds) 
+  ^ ( match xd.raw_sd_rs with 
+    [] -> "" 
+    | rrs -> pp_RULES ^ "\n" 
+	^ String.concat "\n" (List.map pp_raw_rule xd.raw_sd_rs) )
+  ^ "\n" 
+  ^ ( match xd.raw_sd_srs with 
+    [] -> "" 
+    | srs -> pp_SUBRULES ^ "\n" 
+	^ String.concat "\n" (List.map pp_raw_subrule xd.raw_sd_srs) )
+  ^ "\n" 
+  ^ ( match xd.raw_sd_crs with      
+    [] -> "" 
+    | crs -> pp_CONTEXTRULES ^ "\n" 
+	^ String.concat "\n" (List.map pp_raw_contextrule xd.raw_sd_crs) )
+  ^ "\n" 
+  ^ ( match xd.raw_sd_sbs with 
+    [] -> "" 
+    | sbs -> pp_SUBSTITUTIONS ^ "\n" 
+	^ String.concat "\n" (List.map pp_raw_subst xd.raw_sd_sbs) )
+  ^ "\n"
+  ^ ( match xd.raw_sd_fvs with 
+    [] -> "" 
+    | fvs -> pp_FREEVARS ^ "\n" 
+	^ String.concat "\n" (List.map pp_raw_freevar xd.raw_sd_fvs) )
+  ^ "\n"
+  ^ ( match xd.raw_sd_embed with 
+    [] -> "" 
+    | _ -> 
+	pp_EMBED ^ "\n" 
+	^ String.concat "\n" (List.map pp_raw_embedmorphism xd.raw_sd_embed)
+	^ "\n"  )
+  ^ String.concat "\n" (List.map pp_raw_fun_or_reln_defnclass xd.raw_sd_dcs)
+  ^ "\n"
+  (* ^ ( match xd.raw_sd_embed_postamble with *)
+  (*   [] -> "" *)
+  (*   | _ -> *)
+  (*       pp_EMBED ^ "\n" *)
+  (*       ^ String.concat "\n" (List.map pp_raw_embedmorphism xd.raw_sd_embed_postamble) *)
+  (*       ^ "\n"  ) *)
+  ^ "\n"
 
 and pp_raw_line x = match x with
 | Raw_line (_,s) -> s
@@ -790,6 +842,11 @@ and tex_fundefn_name m s = "\\"^pp_tex_NAME_PREFIX m^"fundefn"^tex_command_escap
 and tex_fundefnclass_name m s = "\\"^pp_tex_NAME_PREFIX m^"fundefns"^tex_command_escape s
 
 and pp_tex_terminal m xd tm =
+  (* Terminals in TeX output are user-facing. After import/link hygiene, some
+     internal identifiers can appear in terminal position (notably judgement
+     forms generated from defn identifiers). Always surface them via
+     provenance, so internal names like "__ott_trans_*" never leak. *)
+  let tm = tex_surface_name xd.xd_imports tm in
   try (* firstcheck if this terminal is defined in the terminalsproduction *)
     let term_rule = Auxl.rule_of_ntr xd "terminals" in
     let hom_list = (* FZ define aux function for this *)
@@ -853,10 +910,13 @@ and pp_dots m xd n =
 
 and pp_uninterpreted m xd s =
   match m with
-  | Ascii ao -> col_cyan ao ("(*"^s^"*)")
+  | Ascii ao ->
+      let s = tex_surface_name xd.xd_imports s in
+      col_cyan ao ("(*"^s^"*)")
   | Caml _ | Coq _ | Isa _ | Hol _ | Lem _ | Lex _ | Menhir _ -> "(*"^s^"*)"  
   | Twf _  -> "%{"^s^"}%"  
   | Tex _ -> 
+      let s = tex_surface_name xd.xd_imports s in
       let es = Auxl.pp_tex_escape s in
       if (String.length es > 1) || (Auxl.is_alpha es) 
       then "\\mathbf{"^es^"}" else es  (* FZ mathbf should be COLOR *)
@@ -945,27 +1005,147 @@ and pp_pseudo_hom_spec_el hse =
   | Hom_terminal tm -> tm
   | _ -> Auxl.int_error ("nontermroot hom contains "^pp_plain_hom_spec_el hse)
 
+(* Import qualification helpers *)
+and is_internal_import_name (name : string) : bool =
+  Import_naming.is_internal_transitive name
+  || Import_naming.is_internal_wrapper name
+
+and tex_surface_name ic name =
+  if is_internal_import_name name then Import.display_name ic name else name
+
+(* For TeX command names (macro names), we want a stable, human-meaningful key
+   that does not expose internal hygiene prefixes like "__ott_mod_*" or
+   "__ott_trans_*". The internal identifiers remain necessary in the IR for
+   capture avoidance and internal lookup, but the emitted TeX macro namespace
+   should be defined in terms of source-level names.
+
+   By construction, any internal name introduced by the import/link phases must
+   have a binding entry mapping it back to provider/original-name metadata. *)
+and tex_command_key ic name =
+  if is_internal_import_name name then
+    match Import.lookup_binding ic name with
+    | Some binding -> binding.bi_provider.pi_module ^ "__" ^ binding.bi_origin_name
+    | None -> Import.display_name ic name
+  else
+    name
+
+and qualify_name m ic name =
+  match m with
+  | Tex _ | Ascii _ ->
+    (* TeX/Ascii: show original name from source module *)
+    Import.display_name ic name
+  | _ ->
+    match Import.lookup_binding_for_current_source ic name with
+    | Some binding ->
+      Import_backend.module_id m binding.bi_provider ^ Import_backend.qualifier_sep m ^ binding.bi_origin_name
+    | None -> name
+
+and qualify_from_module m ic mod_name orig_name =
+  match m with
+  | Tex _ | Ascii _ -> orig_name
+  | _ ->
+    match Import.lookup_provider_for_current_source ic mod_name with
+    | None -> orig_name
+    | Some provider -> Import_backend.module_id m provider ^ Import_backend.qualifier_sep m ^ orig_name
+
+and qualify_unqualified_selected_idents_in_string m ic
+    ~(module_name : string) ~(idents : StringSet.t) (s : string) : string =
+  match m with
+  | Tex _ | Ascii _ -> s
+  | _ ->
+    if StringSet.is_empty idents then s
+    else
+      let parts = Auxl.ott_ident_full_split s in
+      let b = Buffer.create (String.length s) in
+      let last_char : char option ref = ref None in
+      let add (t : string) =
+        Buffer.add_string b t;
+        if t <> "" then last_char := Some t.[String.length t - 1]
+      in
+      List.iter (function
+        | Str.Text t -> add t
+        | Str.Delim w ->
+          (* Avoid rewriting already-qualified paths like "Foo.bar". *)
+          let qualified =
+            match !last_char with Some '.' | Some '/' -> true | _ -> false
+          in
+          if qualified || not (StringSet.mem w idents) then add w
+          else add (qualify_from_module m ic module_name w)
+      ) parts;
+      Buffer.contents b
+
+and qualify_idents_in_string m ic s =
+  match m with
+  | Tex _ | Ascii _ -> s
+  | _ ->
+    if Hashtbl.length ic.ic_binding_info_by_local_name = 0 then s
+    else
+      let parts = Auxl.ott_ident_full_split s in
+      String.concat "" (List.map (fun part ->
+        match part with
+        | Str.Delim w -> qualify_name m ic w
+        | Str.Text w -> w
+      ) parts)
+
 and pp_nonterm_with_sie_internal as_type m xd sie (ntr,suff) =
   let pp_hom_spec hs =
     String.concat "" (List.map pp_pseudo_hom_spec_el hs) in
   (* ("<<< "^pp_plain_nonterm (ntr,suff)^" "^string_of_int (List.length sie)^">>>"); *)
-  let r = Auxl.rule_of_ntr xd (Auxl.primary_ntr_of_ntr xd ntr) in
-  (* per P. request, special treatment when printing a nt for which there is a phantom and a tp hom as a type *)
-  let hr = try (Some (List.assoc (Auxl.hom_name_for_pp_mode m) r.rule_homs)) with Not_found -> None in
-  if r.rule_phantom && not (hr=None) && as_type
-  then begin
-    pp_hom_spec (Auxl.the hr)
-  end
-  else begin
-    (* the per-ntr_name hom, if any *)
-    let homs = List.assoc ntr r.rule_ntr_names in
-    let hso = Auxl.hom_spec_for_pp_mode m homs in
+  let rule_opt =
+    try Some (Auxl.rule_of_ntr xd (Auxl.primary_ntr_of_ntr xd ntr))
+    with Not_found -> None
+  in
+  match rule_opt with
+  | None ->
+      (* Be robust: embed blocks and other user strings can contain identifiers
+         that are not declared nonterm roots in the current syntaxdefn. *)
+      let pp_ntr =
+        let surface =
+          match m with
+          | Tex _ -> tex_surface_name xd.xd_imports ntr
+          | _ -> Import.display_name xd.xd_imports ntr
+        in
+        capitalize_if_twelf_non_type as_type m surface
+      in
+      (match m with
+       | Ascii ao ->
+           if not (ao.ppa_ugly) then
+             col_yellow ao (quote_ident (pp_ntr ^ (pp_suffix_with_sie m xd sie suff)))
+           else
+             col_yellow ao (quote_ident (pp_ntr ^ "/" ^ (pp_suffix_with_sie m xd sie suff)))
+       | Tex _ ->
+           pp_tex_NT_NAME m ^ "{"
+           ^ (Auxl.pp_tex_escape pp_ntr ^ (pp_suffix_with_sie m xd sie suff)) ^ "}"
+       | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ ->
+           let pp_ntr_q =
+             if as_type then qualify_name m xd.xd_imports pp_ntr else pp_ntr
+           in
+           let s0 = pp_ntr_q ^ (pp_suffix_with_sie m xd sie suff) in
+           if as_type then s0 else Auxl.hide_isa_trailing_underscore m s0)
+  | Some r ->
+      (* per P. request, special treatment when printing a nt for which there is a phantom and a tp hom as a type *)
+      let hr = try (Some (List.assoc (Auxl.hom_name_for_pp_mode m) r.rule_homs)) with Not_found -> None in
+      if r.rule_phantom && not (hr=None) && as_type
+      then begin
+        pp_hom_spec (Auxl.the hr)
+      end
+      else begin
+        (* the per-ntr_name hom, if any *)
+        let hso =
+          match List.assoc_opt ntr r.rule_ntr_names with
+          | None ->
+              (* After import-time internalization we may still parse symbolic
+                 nonterm variables using legacy surface names (e.g. inside embed
+                 blocks). Treat these as plain identifiers rather than crashing. *)
+              None
+          | Some homs -> Auxl.hom_spec_for_pp_mode m homs
+        in
+        
+        let pp_ntr = match hso with
+        | None -> capitalize_if_twelf_non_type as_type m ntr
+        | Some hs -> pp_hom_spec hs 
+        in
     
-    let pp_ntr = match hso with
-    | None -> capitalize_if_twelf_non_type as_type m ntr
-    | Some hs -> pp_hom_spec hs 
-    in
-
     let auxparam_opt = try Some (List.assoc "auxparam" r.rule_homs) with Not_found -> None in
     let auxparam_prefix_opt = 
       match as_type,m,auxparam_opt with
@@ -986,17 +1166,22 @@ and pp_nonterm_with_sie_internal as_type m xd sie (ntr,suff) =
         
         (match hso,hso' with
         | None,None ->    (* default if no homs *)
-            pp_tex_NT_NAME m ^ "{" 
-            ^ (Auxl.pp_tex_escape ntr^(pp_suffix_with_sie m xd sie suff)) ^ "}"
+            let ntr' = tex_surface_name xd.xd_imports ntr in
+            pp_tex_NT_NAME m ^ "{"
+            ^ (Auxl.pp_tex_escape ntr'^(pp_suffix_with_sie m xd sie suff)) ^ "}"
         | Some _, _ ->    (* use per-ntr hom, overriding any per-rule hom *)
             (pp_ntr^(pp_suffix_with_sie m xd sie suff))
         | None,Some hs -> (* use per-rule hom *)
-            String.concat "" 
-              (apply_hom_spec m xd hs 
-                 [Auxl.pp_tex_escape ntr^(pp_suffix_with_sie m xd sie suff)]))
-    | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ -> 
-        let s0 = pp_ntr ^ (pp_suffix_with_sie m xd sie suff) in
-        let s1 = 
+            let ntr' = tex_surface_name xd.xd_imports ntr in
+            String.concat ""
+              (apply_hom_spec m xd hs
+                 [Auxl.pp_tex_escape ntr'^(pp_suffix_with_sie m xd sie suff)]))
+    | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ ->
+        let pp_ntr_q =
+          if as_type then qualify_name m xd.xd_imports pp_ntr
+          else Import.display_name xd.xd_imports pp_ntr in
+        let s0 = pp_ntr_q ^ (pp_suffix_with_sie m xd sie suff) in
+        let s1 =
           if as_type then s0
           else Auxl.hide_isa_trailing_underscore m s0 in
         let s = match m with
@@ -1027,6 +1212,7 @@ and pp_metavar_with_sie_internal as_type m xd sie (mvr,suff) =
     match m with 
     | Ascii ao -> col_red ao (pp_mvr^(pp_suffix_with_sie m xd sie suff))
     | Tex xo -> 
+        let tex_mvr = tex_surface_name xd.xd_imports mvr in
         (* the per-mvd hom, if any *)
         let homs' = 
           (Auxl.mvd_of_mvr xd (Auxl.primary_mvr_of_mvr xd mvr)).mvd_rep in
@@ -1035,16 +1221,19 @@ and pp_metavar_with_sie_internal as_type m xd sie (mvr,suff) =
         (match hso,hso' with
         | None,None ->    (* default if no homs *)
             pp_tex_MV_NAME m ^  "{" 
-            ^ (Auxl.pp_tex_escape mvr^(pp_suffix_with_sie m xd sie suff)) ^ "}"
+            ^ (Auxl.pp_tex_escape tex_mvr^(pp_suffix_with_sie m xd sie suff)) ^ "}"
         | Some _, _ ->    (* use per-mvr hom, overriding any per-mvd hom *)
             (pp_mvr^(pp_suffix_with_sie m xd sie suff))
         | None,Some hs -> (* use per-mvd hom *)
             String.concat "" 
               (apply_hom_spec m xd hs 
-                 [Auxl.pp_tex_escape mvr^(pp_suffix_with_sie m xd sie suff)]))
+                 [Auxl.pp_tex_escape tex_mvr^(pp_suffix_with_sie m xd sie suff)]))
 
-    | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ -> 
-        let s = pp_mvr ^ (pp_suffix_with_sie m xd sie suff) in
+    | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ ->
+        let pp_mvr_q =
+          if as_type then qualify_name m xd.xd_imports pp_mvr
+          else pp_mvr in
+        let s = pp_mvr_q ^ (pp_suffix_with_sie m xd sie suff) in
         if as_type then s
         else Auxl.hide_isa_trailing_underscore m s
   end
@@ -1059,8 +1248,51 @@ and pp_nt_or_mv_with_de_with_sie_internal as_type m xd sie (de :dotenv) ((ntmvr,
   | Ascii _ | Tex _ -> pp_nt_or_mv_with_sie_internal as_type m xd sie ntmv
   | Isa _ | Coq _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ -> 
       let (de1,de2) = de in
+      let bound_binder_from_de1 () : string option =
+        (* When printing inside the body of a listform map, bounded occurrences
+           (those that carry a suffix index) should refer to the *pattern
+           binders* for the current tuple element. We reconstruct the same
+           freshened binder list as Bounds.dotenv1 and pick the component
+           corresponding to this nt/mv. *)
+        let has_suffix_index (suff : suffix) : bool =
+          List.exists (function Si_index _ -> true | _ -> false) suff
+        in
+        if not (has_suffix_index suff0) then None
+        else
+        let rec find_de1_item = function
+          | [] -> None
+          | (_b, de1i) :: rest ->
+              if List.exists (fun ((ntmv', _subntr_data) : (nt_or_mv * subntr_data)) -> ntmv' = ntmv) de1i.de1_ntmvsns
+              then Some de1i
+              else find_de1_item rest
+        in
+        match find_de1_item de1 with
+        | None -> None
+        | Some de1i ->
+            if List.length de1i.de1_ntmvsns <= 1 then
+              Some (pp_nt_or_mv_with_sie m xd [Si_punct "_"] ntmv)
+            else
+              let base_binders =
+                List.map
+                  (function ((ntmv', _subntr_data) : (nt_or_mv * subntr_data)) ->
+                    pp_nt_or_mv_with_sie m xd [Si_punct "_"] ntmv')
+                  de1i.de1_ntmvsns
+              in
+              let binders = Auxl.ensure_unique_names base_binders in
+              let rec find_idx i = function
+                | [] -> None
+                | ((ntmv', _subntr_data) : (nt_or_mv * subntr_data)) :: rest ->
+                    if ntmv' = ntmv then Some i else find_idx (i + 1) rest
+              in
+              (match find_idx 0 de1i.de1_ntmvsns with
+               | None -> None
+               | Some i -> Some (List.nth binders i))
+      in
       match try Some(List.assoc ntmv de2) with Not_found -> None with
-      | None -> pp_nt_or_mv_with_sie m xd sie ntmv
+      | None ->
+          (match bound_binder_from_de1 () with
+           | Some s -> s
+           | None -> pp_nt_or_mv_with_sie m xd sie ntmv)
       | Some (suff,suffi,bound) ->
           let de1i = List.assoc bound de1 in
           let non_zero_lower_of_bound (b : bound) : suffix_item option =
@@ -1105,12 +1337,37 @@ and pp_nt_or_mv_with_de_with_sie_internal as_type m xd sie (de :dotenv) ((ntmvr,
              )
           | Coq co ->  
     	      let hyp_var = c:=!c+1; "t"^(string_of_int !c); in (* FZ need a properly freshened name here *)
-	      let ty_list = Str.split (Str.regexp "(\\|*\\|)") de1i.de1_coq_type_of_pattern in
-              let proj_arg = pp_nt_or_mv_with_sie m xd ((Si_var ("_",0))::sie) (ntmvr,suff) in
-              let suffi_s = pp_plain_suffix_item suffi in
-	      let nth_pred = 
-		if co.coq_expand_lists 
-		then 
+		      let ty_list = Str.split (Str.regexp "(\\|*\\|)") de1i.de1_coq_type_of_pattern in
+	              let proj_arg =
+	                (* For list-tuples, the pattern variables are freshened (see
+	                   Bounds.dotenv1). We must project by *structure* (which
+	                   component corresponds to this nt/mv root), not by
+	                   re-printing the root name and hoping it matches. *)
+	                if List.length de1i.de1_ntmvsns <= 1 then
+	                  pp_nt_or_mv_with_sie m xd ((Si_var ("_",0))::sie) (ntmvr,suff)
+	                else
+	                  let base_binders =
+	                    List.map
+	                      (function (((ntmvr',suff') : nt_or_mv), _subntr_data) ->
+	                        pp_nt_or_mv_with_sie m xd ((Si_var ("_",0))::sie) (ntmvr',suff'))
+	                      de1i.de1_ntmvsns
+	                  in
+	                  let binders = Auxl.ensure_unique_names base_binders in
+	                  let rec find_idx i = function
+	                    | [] -> None
+	                    | (((ntmvr', _suff') : nt_or_mv), _subntr_data) :: rest ->
+	                        if ntmvr' = ntmvr then Some i else find_idx (i + 1) rest
+	                  in
+	                  (match find_idx 0 de1i.de1_ntmvsns with
+	                   | None ->
+	                       (* Should not happen, but fall back gracefully. *)
+	                       pp_nt_or_mv_with_sie m xd ((Si_var ("_",0))::sie) (ntmvr,suff)
+	                   | Some i -> List.nth binders i)
+	              in
+	              let suffi_s = pp_plain_suffix_item suffi in
+		      let nth_pred = 
+			if co.coq_expand_lists 
+			then 
 		  "     nth_list_" ^String.concat "_" ty_list ^ " " 
 		  ^ Auxl.paren (suffi_s
 			   ^ (match non_zero_lower_of_bound bound with 
@@ -1128,13 +1385,13 @@ and pp_nt_or_mv_with_de_with_sie_internal as_type m xd sie (de :dotenv) ((ntmvr,
 	      co.coq_non_local_hyp_defn_vars := 
 		!(co.coq_non_local_hyp_defn_vars) 
 		@ [ (hyp_var,Some de1i.de1_coq_type_of_pattern) ]; (* ; (quant_suffi_s,None) now computed by extract_quantifiers *)
-	      co.coq_non_local_hyp_defn := 
-		!(co.coq_non_local_hyp_defn) 
-		^ nth_pred 
-		^ " = Some " ^ hyp_var ^ " ->\n";
-	      ( if (String.compare de1i.de1_pattern proj_arg = 0)
-	      then hyp_var 
-	      else "(match " ^ hyp_var ^ " with " ^ de1i.de1_pattern ^ " => " ^ proj_arg ^" end)" )
+		      co.coq_non_local_hyp_defn := 
+			!(co.coq_non_local_hyp_defn) 
+			^ nth_pred 
+			^ " = Some " ^ hyp_var ^ " ->\n";
+		      ( if (String.compare de1i.de1_pattern proj_arg = 0)
+		      then hyp_var 
+		      else "(match " ^ hyp_var ^ " with " ^ de1i.de1_pattern ^ " => " ^ proj_arg ^" end)" )
           | Ascii _ | Tex _ -> raise ThisCannotHappen
           | Twf _ -> raise TwelfNotImplemented
           | Caml _ | Lex _ | Menhir _ -> Auxl.errorm m "pp_symterm for proper symterms not supported"
@@ -1216,67 +1473,73 @@ and coq_maybe_decide_equality m xd homs ntmvr loc =
       ^ "#[export] Hint Resolve eq_" ^ type_name  ^ " : ott_coq_equality.\n"
 
 and pp_metavardefn m xd mvd =
-  let pp_com = pp_com_strings m xd mvd.mvd_rep [pp_metavar_with_sie m xd [] (mvd.mvd_name,[])] in
-  match m with 
-  | Ascii ao ->
-      pp_METAVAR ^ " " 
-      ^ (String.concat " , "(List.map 
-                               (function (mvr,homs)->pp_metavarroot m xd mvr)
-                               mvd.mvd_names)) 
-      ^ " " ^ pp_CCE ^ " " 
-      ^ (pp_metavarrep m xd mvd.mvd_rep "" mvd.mvd_loc) ^ "\n"
-  | Tex xo -> 
-      " $ "
-      ^ (String.concat " ,\\, "(List.map 
-				  (function (mvr,homs)->pp_metavarroot m xd mvr)
-				  mvd.mvd_names)) 
-      ^ " $ & " ^ pp_com ^ " \\\\"
-  | _ ->
-      ( match mvd.mvd_phantom with
-      | true -> ""
-      | false -> ( match m with
-	| Coq co ->
-            let type_name = pp_metavarroot_ty m xd mvd.mvd_name in
-            let universe =
-              match Auxl.hom_spec_for_hom_name "rocq-universe" mvd.mvd_rep with
-              | Some hs -> pp_hom_spec m xd hs
-              | None -> "Set"
-            in
-            let body = pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc in
-            let sentence =
-              if Auxl.hom_spec_for_hom_name "rocq-notation" mvd.mvd_rep <> None then
-	        "Notation " ^ type_name ^ " := (" ^ body ^ " : " ^ universe ^ ")."
-              else
-	        "Definition " ^  type_name ^ " : " ^ universe ^ " := " ^ body ^ "."
-            in
-            sentence
-            ^ pp_com ^ "\n"
-	    ^ coq_maybe_decide_equality m xd mvd.mvd_rep (Mvr mvd.mvd_name) mvd.mvd_loc
-	| Caml oo ->
-	    let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
-	    "type "
-	    ^ type_name 
-	    ^ " = " 
-	    ^ pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc
-	    ^ pp_com ^ "\n"
-	| Isa io ->
-	    let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
-	    if Auxl.is_nominal_atom m xd mvd
-	    then
-	      "atom_decl \"" ^ type_name ^ "\"" ^ pp_com ^ "\n"
-	    else
-	      "type_synonym \"" ^ type_name ^ "\" = \"" 
-	      ^ (pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc)^ "\"" ^ pp_com ^ "\n"
-	| Hol ho -> 
-	    let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
-	    "Type "
-	    ^ type_name
-	    ^ " = ``:"
-	    ^ (pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc) ^ "``"
-	    ^ pp_com ^ "\n"
-	| Lem lo -> 
-	    let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
-	    "type "
+  let source_file =
+    match mvd.mvd_loc with
+    | [] -> None
+    | _ -> Some (Import_naming.source_file_of_loc ~default:"" mvd.mvd_loc)
+  in
+  Import.with_current_source_file source_file (fun () ->
+    let pp_com = pp_com_strings m xd mvd.mvd_rep [pp_metavar_with_sie m xd [] (mvd.mvd_name,[])] in
+    match m with
+    | Ascii ao ->
+        pp_METAVAR ^ " " 
+        ^ (String.concat " , "(List.map 
+                                 (function (mvr,homs)->pp_metavarroot m xd mvr)
+                                 mvd.mvd_names)) 
+        ^ " " ^ pp_CCE ^ " " 
+        ^ (pp_metavarrep m xd mvd.mvd_rep "" mvd.mvd_loc) ^ "\n"
+    | Tex xo -> 
+        " $ "
+        ^ (String.concat " ,\\, "(List.map 
+				    (function (mvr,homs)->pp_metavarroot m xd mvr)
+				    mvd.mvd_names)) 
+        ^ " $ & " ^ pp_com ^ " \\\\"
+    | _ ->
+        ( match mvd.mvd_phantom with
+        | true -> ""
+        | false -> ( match m with
+	  | Coq co ->
+              let type_name = pp_metavarroot_ty m xd mvd.mvd_name in
+              let universe =
+                match Auxl.hom_spec_for_hom_name "rocq-universe" mvd.mvd_rep with
+                | Some hs -> pp_hom_spec m xd hs
+                | None -> "Set"
+              in
+              let body = pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc in
+              let sentence =
+                if Auxl.hom_spec_for_hom_name "rocq-notation" mvd.mvd_rep <> None then
+	          "Notation " ^ type_name ^ " := (" ^ body ^ " : " ^ universe ^ ")."
+                else
+	          "Definition " ^  type_name ^ " : " ^ universe ^ " := " ^ body ^ "."
+              in
+              sentence
+              ^ pp_com ^ "\n"
+	      ^ coq_maybe_decide_equality m xd mvd.mvd_rep (Mvr mvd.mvd_name) mvd.mvd_loc
+	  | Caml oo ->
+	      let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
+	      "type "
+	      ^ type_name 
+	      ^ " = " 
+	      ^ pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc
+	      ^ pp_com ^ "\n"
+	  | Isa io ->
+	      let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
+	      if Auxl.is_nominal_atom m xd mvd
+	      then
+	        "atom_decl \"" ^ type_name ^ "\"" ^ pp_com ^ "\n"
+	      else
+	        "type_synonym \"" ^ type_name ^ "\" = \"" 
+	        ^ (pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc)^ "\"" ^ pp_com ^ "\n"
+	  | Hol ho -> 
+	      let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
+	      "Type "
+	      ^ type_name
+	      ^ " = ``:"
+	      ^ (pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc) ^ "``"
+	      ^ pp_com ^ "\n"
+	  | Lem lo -> 
+	      let type_name = pp_metavarroot_ty m xd mvd.mvd_name in 
+	      "type "
 	    ^ type_name
 	    ^ " = "
 	    ^ pp_metavarrep m xd mvd.mvd_rep type_name mvd.mvd_loc
@@ -1287,7 +1550,7 @@ and pp_metavardefn m xd mvd =
 	    ^ " : type = nat.\n"
         | Lex _ -> "" 
         | Menhir _ -> ""
-	| Ascii _ | Tex _ -> raise Auxl.ThisCannotHappen ))
+	| Ascii _ | Tex _ -> raise Auxl.ThisCannotHappen )))
 
 and pp_metavarrep m xd mvd_rep type_name loc =
   match m with
@@ -1332,18 +1595,35 @@ and pp_prodname m xd pn =  (* FZ this is never called *)
 
 and pp_category m xd cat = pp_maybe_quote_ident m xd cat
 
-and apply_hom_spec m xd hses ss =
+ and apply_hom_spec ?qualify_imported_prods m xd hses ss =
   match hses with
   | [] -> []
-  | Hom_string s :: hses' -> 
-      s :: apply_hom_spec m xd hses' ss 
+  | Hom_string s :: hses' ->
+      let s' = s in
+      let s' =
+        match qualify_imported_prods with
+        | None -> s'
+        | Some (mod_name, prods) ->
+          qualify_unqualified_selected_idents_in_string m xd.xd_imports
+            ~module_name:mod_name ~idents:prods s'
+      in
+      s' :: apply_hom_spec ?qualify_imported_prods m xd hses' ss
   | Hom_index i :: hses' -> 
-      (List.nth ss i) :: apply_hom_spec m xd hses' ss
+      (List.nth ss i) :: apply_hom_spec ?qualify_imported_prods m xd hses' ss
   | Hom_terminal tm :: hses' -> 
-      pp_terminal m xd tm :: apply_hom_spec m xd hses' ss
+      let t = pp_terminal m xd tm in
+      let t' = t in
+      let t' =
+        match qualify_imported_prods with
+        | None -> t'
+        | Some (mod_name, prods) ->
+          qualify_unqualified_selected_idents_in_string m xd.xd_imports
+            ~module_name:mod_name ~idents:prods t'
+      in
+      t' :: apply_hom_spec ?qualify_imported_prods m xd hses' ss
   | Hom_ln_free_index (fvs,i) :: hses' ->
       (* fvs are only taken into account when opening terms in ln_transforms, and should be ignored here *)
-      (List.nth ss i) :: apply_hom_spec m xd hses' ss
+      (List.nth ss i) :: apply_hom_spec ?qualify_imported_prods m xd hses' ss
     
 and pp_com_es m xd homs es = 
   match Auxl.hom_spec_for_hom_name "com" homs with
@@ -2555,115 +2835,122 @@ and pp_prod m xd rnn rpw p = (* returns a string option *)
 and pp_internal_coq_buffer = ref "" (* FZ HACK *)
 
 and pp_rule m xd r = (* returns a string option *)
-  let pp_com = pp_com_strings m xd r.rule_homs [pp_nonterm_with_sie m xd [] (r.rule_ntr_name,[])] in
-  let result : string option = 
-  match m with 
-  | Lex _ | Menhir _ -> Auxl.errorm m "pp_rule"
-  | Ascii ao ->
-      let pnw' = 
-	if ao.ppa_lift_cons_prefixes 
-	then r.rule_pn_wrapper
-	else "''" in
-      Some 
-        ((String.concat " , " (List.map 
-                                 (function ntr,homs->pp_nontermroot m xd ntr) 
-                                 r.rule_ntr_names)) ^ " "
-         ^ pp_COLONCOLON ^ " " ^ pnw' ^ " "
-         ^ pp_CCE ^ " "
-         ^ pp_homomorphism_list m xd r.rule_homs^"\n" ^ "  " 
-         ^ String.concat 
-             "  " 
-             (List.map 
-                (fun s -> s ^ "\n")
-                (Auxl.option_map 
-                   (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper) 
-                   r.rule_ps)))
-  | Isa _ ->
-(* PS hack below to turn off printing of phantom rule bodies - please check! *)
-    if r.rule_meta || r.rule_phantom  
-      then None
-      else 
+  let source_file =
+    match r.rule_loc with
+    | [] -> None
+    | _ -> Some (Import_naming.source_file_of_loc ~default:"" r.rule_loc)
+  in
+  Import.with_current_source_file source_file (fun () ->
+    let pp_com = pp_com_strings m xd r.rule_homs [pp_nonterm_with_sie m xd [] (r.rule_ntr_name,[])] in
+    let result : string option =
+    match m with
+    | Lex _ | Menhir _ -> Auxl.errorm m "pp_rule"
+    | Ascii ao ->
+        let pnw' = 
+	  if ao.ppa_lift_cons_prefixes 
+	  then r.rule_pn_wrapper
+	  else "''" in
         Some 
-          ("\""^pp_nontermroot_ty m xd r.rule_ntr_name ^ "\" = "^pp_com^"\n   " 
-           ^ String.concat " | " 
+          ((String.concat " , " (List.map 
+                                   (function ntr,homs->pp_nontermroot m xd ntr) 
+                                   r.rule_ntr_names)) ^ " "
+           ^ pp_COLONCOLON ^ " " ^ pnw' ^ " "
+           ^ pp_CCE ^ " "
+           ^ pp_homomorphism_list m xd r.rule_homs^"\n" ^ "  " 
+           ^ String.concat 
+               "  " 
                (List.map 
-                  (function s -> s^"\n") 
+                  (fun s -> s ^ "\n")
                   (Auxl.option_map 
-		     (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper) 
-                     r.rule_ps))
-           ^ "")
-  | Hol _ | Lem _| Caml _ ->
-      if r.rule_meta || r.rule_phantom 
-      then None
-      else 
-        Some 
-          (strip_surrounding_parens (pp_nontermroot_ty m xd r.rule_ntr_name) ^ " = "^pp_com^"\n" 
-	   ^ (match m with Lem _ -> " | " | _ -> "   ")
-           ^ String.concat " | " 
-               (List.map 
-                  (function s -> s^"\n") 
-                  (Auxl.option_map 
-		     (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper) 
-                     r.rule_ps))
-           ^ "")
-  | Coq co ->
-      pp_internal_coq_buffer := !pp_internal_coq_buffer ^
-        coq_maybe_decide_equality m xd r.rule_homs (Ntr r.rule_ntr_name) r.rule_loc;
-      if r.rule_meta || r.rule_phantom
-      then None
-      else
-        let universe = match Auxl.hom_spec_for_hom_name "rocq-universe" r.rule_homs with
-          | Some hs -> pp_hom_spec m xd hs
-          | None -> "Set" in
-        Some
-          (pp_nontermroot_ty m xd r.rule_ntr_name ^ " : "^universe^ " := "^pp_com^"\n"
-           ^ String.concat "\n"
-             (Auxl.option_map
-                (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper)
-                r.rule_ps))
-  | Twf wo -> 
-      if r.rule_meta || r.rule_phantom 
-      then None
-      else
-        Some 
-          (pp_nontermroot_ty m xd r.rule_ntr_name ^ " : type. \n\n" 
-           ^ String.concat "" 
-               (List.map 
-                  (function s -> s^"\n") 
-                  (Auxl.option_map 
-		     (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper)
-                     r.rule_ps))
-           ^ "")
-  | Tex xo ->
-      let suppressed_ntr = 
-        List.mem r.rule_ntr_name xo.ppt_suppressed_ntrs
-      in
-      if suppressed_ntr || (not(xo.ppt_show_meta) && r.rule_semi_meta) then 
-        None
-      else
-        Some
-(* TODO: update the following to respect pp_tex_LONG_PROD_NAME (if necessary...) *)
-          (Str.replace_first 
-             (Str.regexp_string (pp_tex_PROD_NAME m))  
-             (pp_tex_FIRST_PROD_NAME m) 
-             ( "\\newcommand{"
-               ^ tex_rule_name m r.rule_ntr_name
-               ^ "}{\n"
-	       ^ (String.concat (pp_tex_PROD_NEWLINE_NAME m^"\n") 
-                    ( ( pp_tex_RULEHEAD_NAME m^"{"
-	                ^ String.concat  "  ,\\ "
-	                    (Auxl.remove_duplicates (List.map (function ntr,homs->pp_nontermroot m xd ntr) r.rule_ntr_names))
-	                ^ "}{::=}{" ^ pp_com ^ "}")
-                      ::
-	                (Auxl.option_map 
-                           (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper)
-                           r.rule_ps)))
-(*            ^"[5.0mm]" *)
-	       ^ "}\n"  ))
-  in 
-  match result with
-  | Some s -> Some (if !Global_option.output_source_locations >= 2 then "\n"^pp_source_location m r.rule_loc  ^ s else s)
-  | None -> None
+                     (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper) 
+                     r.rule_ps)))
+    | Isa _ ->
+  (* PS hack below to turn off printing of phantom rule bodies - please check! *)
+      if r.rule_meta || r.rule_phantom  
+        then None
+        else 
+          Some 
+            ("\""^pp_nontermroot_ty m xd r.rule_ntr_name ^ "\" = "^pp_com^"\n   " 
+             ^ String.concat " | " 
+                 (List.map 
+                    (function s -> s^"\n") 
+                    (Auxl.option_map 
+		       (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper) 
+                       r.rule_ps))
+             ^ "")
+    | Hol _ | Lem _| Caml _ ->
+        if r.rule_meta || r.rule_phantom 
+        then None
+        else 
+          Some 
+            (strip_surrounding_parens (pp_nontermroot_ty m xd r.rule_ntr_name) ^ " = "^pp_com^"\n" 
+	     ^ (match m with Lem _ -> " | " | _ -> "   ")
+             ^ String.concat " | " 
+                 (List.map 
+                    (function s -> s^"\n") 
+                    (Auxl.option_map 
+		       (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper) 
+                       r.rule_ps))
+             ^ "")
+    | Coq co ->
+        pp_internal_coq_buffer := !pp_internal_coq_buffer ^
+          coq_maybe_decide_equality m xd r.rule_homs (Ntr r.rule_ntr_name) r.rule_loc;
+        if r.rule_meta || r.rule_phantom
+        then None
+        else
+          let universe = match Auxl.hom_spec_for_hom_name "rocq-universe" r.rule_homs with
+            | Some hs -> pp_hom_spec m xd hs
+            | None -> "Set" in
+          Some
+            (pp_nontermroot_ty m xd r.rule_ntr_name ^ " : "^universe^ " := "^pp_com^"\n"
+             ^ String.concat "\n"
+               (Auxl.option_map
+                  (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper)
+                  r.rule_ps))
+    | Twf wo -> 
+        if r.rule_meta || r.rule_phantom 
+        then None
+        else
+          Some 
+            (pp_nontermroot_ty m xd r.rule_ntr_name ^ " : type. \n\n" 
+             ^ String.concat "" 
+                 (List.map 
+                    (function s -> s^"\n") 
+                    (Auxl.option_map 
+		       (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper)
+                       r.rule_ps))
+             ^ "")
+    | Tex xo ->
+        let suppressed_ntr = 
+          List.mem r.rule_ntr_name xo.ppt_suppressed_ntrs
+        in
+        if suppressed_ntr || (not(xo.ppt_show_meta) && r.rule_semi_meta) then 
+          None
+        else
+          let rule_macro_key = tex_command_key xd.xd_imports r.rule_ntr_name in
+          Some
+  (* TODO: update the following to respect pp_tex_LONG_PROD_NAME (if necessary...) *)
+            (Str.replace_first 
+               (Str.regexp_string (pp_tex_PROD_NAME m))  
+               (pp_tex_FIRST_PROD_NAME m) 
+               ( "\\newcommand{"
+                 ^ tex_rule_name m rule_macro_key
+                 ^ "}{\n"
+	         ^ (String.concat (pp_tex_PROD_NEWLINE_NAME m^"\n") 
+                      ( ( pp_tex_RULEHEAD_NAME m^"{"
+	                  ^ String.concat  "  ,\\ "
+	                      (Auxl.remove_duplicates (List.map (function ntr,homs->pp_nontermroot m xd ntr) r.rule_ntr_names))
+	                  ^ "}{::=}{" ^ pp_com ^ "}")
+                        ::
+	                  (Auxl.option_map 
+                             (pp_prod m xd r.rule_ntr_name r.rule_pn_wrapper)
+                             r.rule_ps)))
+  (*            ^"[5.0mm]" *)
+	         ^ "}\n"  ))
+    in 
+    match result with
+    | Some s -> Some (if !Global_option.output_source_locations >= 2 then "\n"^pp_source_location m r.rule_loc  ^ s else s)
+    | None -> None)
 
 and         (* the strip_surrounding_parens is a horrible hack to remove the parens introduced around an auxparam-introduced type name and its arguments when used on the left of a definition, for Lem *)
     strip_surrounding_parens s =
@@ -2731,8 +3018,7 @@ and ordered_rule_groups m xd rs =
         @ (group, rules_in_group) :: merge_groups after groups'
   in
   merge_groups singleton_groups dep_groups
-
-and tex_rule_grammar_items ?(string_of_embeds=(fun _ -> "")) m rs =
+and tex_rule_grammar_items ?(string_of_embeds=(fun _ -> "")) m xd rs =
   let xo =
     match m with
     | Tex xo -> xo
@@ -2745,22 +3031,22 @@ and tex_rule_grammar_items ?(string_of_embeds=(fun _ -> "")) m rs =
       (fun x -> x)
       [ if suppressed_ntr || (not xo.ppt_show_meta && r.rule_semi_meta)
         then None
-        else Some (tex_rule_name m r.rule_ntr_name);
+        else Some (tex_rule_name m (tex_command_key xd.xd_imports r.rule_ntr_name));
         tex_item (string_of_embeds r.rule_embeds) ]
   in
   List.concat (List.map tex_items_of_rule rs)
 
-and pp_rule_list ?(string_of_embeds=(fun _ -> "")) m xd lookup rs = 
+and pp_rule_list ?(string_of_embeds=(fun _ -> "")) m xd _lookup rs =
   let render_rule_group td md fd (group, rules_in_group) =
-    match group, rules_in_group with
-    | [Ntr ntr], [r]
-      when (None <> Auxl.hom_spec_for_pp_mode m r.rule_homs
-            && match m with Isa _ | Coq _ | Hol _ | Lem _ | Caml _ -> true | _ -> false) ->
-        let body =
+    let segment =
+      match group, rules_in_group with
+      | [Ntr ntr], [r]
+        when (None <> Auxl.hom_spec_for_pp_mode m r.rule_homs
+              && (match m with Isa _ | Coq _ | Hol _ | Lem _ | Caml _ -> true | _ -> false)) ->
           if r.rule_phantom then ""
           else
             let hs = Auxl.the (Auxl.hom_spec_for_pp_mode m r.rule_homs) in
-            match m with
+            (match m with
             | Isa _ ->
                 "type_synonym "
                 ^ "\"" ^ pp_nontermroot_ty m xd ntr ^ "\" = \""
@@ -2799,36 +3085,31 @@ and pp_rule_list ?(string_of_embeds=(fun _ -> "")) m xd lookup rs =
                 ^ strip_surrounding_parens (pp_nontermroot_ty m xd ntr) ^ " = "
                 ^ pp_hom_spec m xd hs
                 ^ "\n\n"
-            | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "pp_rule_list"
-        in
-        decorate_rule_group string_of_embeds [r] body
-    | _, _ ->
-        let def_string =
-          String.concat md (Auxl.option_map (pp_rule m xd) rules_in_group)
-        in
-        let body =
+            | Ascii _ | Tex _ | Lex _ | Menhir _ -> Auxl.errorm m "pp_rule_list")
+      | _, _ ->
+          let def_string =
+            String.concat md (Auxl.option_map (pp_rule m xd) rules_in_group)
+          in
           if String.length def_string = 0 then ""
           else td rules_in_group ^ def_string ^ fd ^ "\n"
-        in
-        decorate_rule_group string_of_embeds rules_in_group body
+    in
+    decorate_rule_group string_of_embeds rules_in_group segment
   in
   let render_rule_groups td md fd =
     String.concat ""
       (List.map (render_rule_group td md fd) (ordered_rule_groups m xd rs))
   in
-
-  match m with 
-  | Ascii _ -> 
+  match m with
+  | Ascii _ ->
       let rendered =
-        if (Auxl.select_dep_ts m xd.xd_dep) = []
+        if Auxl.select_dep_ts m xd.xd_dep = []
         then render_rule_groups (fun _ -> "") "\n" ""
         else render_rule_groups (fun _ -> "\n") "\n" ""
       in
       if rendered = "" then "\n" else rendered
   | Isa _ ->
       render_rule_groups
-        ( fun rs -> 
-          if Auxl.rules_require_nominal m xd rs then "nominal_datatype " else "datatype ")
+        (fun rs -> if Auxl.rules_require_nominal m xd rs then "nominal_datatype " else "datatype ")
         "and " ""
   | Hol _ ->
       render_rule_groups (fun _ -> "val _ = Hol_datatype ` \n") ";\n" "`;"
@@ -2845,13 +3126,13 @@ and pp_rule_list ?(string_of_embeds=(fun _ -> "")) m xd lookup rs =
       render_rule_groups (fun _ -> "\ntype ") "\nand " ""
   | Tex _ ->
       let defs_block = String.concat "\n" (Auxl.option_map (pp_rule m xd) rs) in
-      let grammar_items = tex_rule_grammar_items ~string_of_embeds m rs in
-      defs_block 
-      ^ "\\newcommand{"^pp_tex_RULES_NAME m^"}{"
+      let grammar_items = tex_rule_grammar_items ~string_of_embeds m xd rs in
+      defs_block
+      ^ "\\newcommand{" ^ pp_tex_RULES_NAME m ^ "}{"
       ^ pp_tex_BEGIN_RULES m
-      ^ String.concat (pp_tex_INTERRULE_NAME m ^"\n") grammar_items
-      ^ (match grammar_items with []-> "" | _ -> pp_tex_AFTERLASTRULE_NAME m)
-      ^ "\n"^pp_tex_END_RULES ^ "}\n\n"
+      ^ String.concat (pp_tex_INTERRULE_NAME m ^ "\n") grammar_items
+      ^ (match grammar_items with [] -> "" | _ -> pp_tex_AFTERLASTRULE_NAME m)
+      ^ "\n" ^ pp_tex_END_RULES ^ "}\n\n"
   | Lex _ | Menhir _ ->
       render_rule_groups (fun _ -> "") "\n" ""
  
@@ -2959,12 +3240,22 @@ and pp_ascii_subst m xd subst =
   ^ pp_nt_or_mv_root m xd subst.sb_that^ " "
   ^ pp_homomorphism_list m xd subst.sb_homs 
 
-and pp_syntaxdefn ?(string_of_embeds=(fun _ -> "")) m xd lookup = 
+and pp_syntaxdefn ?(string_of_embeds=(fun _ -> "")) m xd lookup =
+  let ic = xd.xd_imports in
+  let local_mds = List.filter (fun mvd ->
+    not (Import.is_imported_loc ic mvd.mvd_loc)) xd.xd_mds in
+  let local_rs = List.filter (fun r ->
+    not (Import.is_imported_loc ic r.rule_loc)) xd.xd_rs in
+  let mds_to_emit, rs_to_emit =
+    match m with
+    | Tex _ -> xd.xd_mds, xd.xd_rs
+    | _ -> local_mds, local_rs
+  in
   match m with
-  | Ascii ao -> 
-      String.concat "\n" (List.map (pp_metavardefn m xd) xd.xd_mds) 
+  | Ascii ao ->
+      String.concat "\n" (List.map (pp_metavardefn m xd) mds_to_emit)
       ^ pp_RULES^"\n"
-      ^ pp_rule_list ~string_of_embeds m xd lookup xd.xd_rs ^ "\n" 
+      ^ pp_rule_list ~string_of_embeds m xd lookup rs_to_emit ^ "\n"
       ^ pp_SUBRULES^"\n"
       ^ String.concat "\n" (List.map (pp_ascii_subrule m xd) xd.xd_srs) ^"\n"
       ^ String.concat "\n" (List.map (pp_ascii_contextrule m xd) xd.xd_crs) ^"\n\n"
@@ -2974,14 +3265,14 @@ and pp_syntaxdefn ?(string_of_embeds=(fun _ -> "")) m xd lookup =
           (pp_plain_top_sort m xd ^ pp_plain_dep_graph m xd)
         else "")
   | Isa _ | Coq _ | Hol _ | Lem _ | Twf _ | Caml _ ->
-      String.concat "" (List.map (pp_metavardefn m xd) xd.xd_mds) 
-      ^ pp_rule_list ~string_of_embeds m xd lookup xd.xd_rs 
+      String.concat "" (List.map (pp_metavardefn m xd) mds_to_emit)
+      ^ pp_rule_list ~string_of_embeds m xd lookup rs_to_emit
   | Tex _ ->
       "\\newcommand{"^pp_tex_METAVARS_NAME m^"}{\n"
       ^ pp_tex_BEGIN_METAVARS m  (*  "\\[\\begin{array}{l}\n" *)
-      ^ String.concat "\n" (List.map (pp_metavardefn m xd) xd.xd_mds) 
+      ^ String.concat "\n" (List.map (pp_metavardefn m xd) mds_to_emit)
       ^ "\n"^pp_tex_END_METAVARS ^"}\n\n"  (*  ^ "\\end{array}\\]\n" *)
-      ^ pp_rule_list ~string_of_embeds m xd lookup xd.xd_rs
+      ^ pp_rule_list ~string_of_embeds m xd lookup rs_to_emit
   | Lex _ | Menhir _ ->
       "<<TODO>>"
 
@@ -3176,7 +3467,21 @@ and pp_symterm_node_body m xd sie de stnb : string =
   (* if there's a hom, use that *)
   | Some hses ->
       let pp_es = pp_symterm_elements m xd sie de false prod_es stnb.st_es in
-      let xs = apply_hom_spec m xd hses pp_es in
+      let qualify_imported_prods =
+        match Import.lookup_binding xd.xd_imports stnb.st_rule_ntr_name with
+        | None -> None
+        | Some binding ->
+          let r = Auxl.rule_of_ntr xd stnb.st_rule_ntr_name in
+          let prod_names =
+            List.map (fun p0 ->
+              match Import.lookup_binding xd.xd_imports p0.prod_name with
+              | Some prod_binding -> prod_binding.bi_origin_name
+              | None -> p0.prod_name
+            ) r.rule_ps
+          in
+          Some (binding.bi_provider.pi_module, StringSet.of_list prod_names)
+      in
+      let xs = apply_hom_spec ?qualify_imported_prods m xd hses pp_es in
 (*      " {{ "^String.concat " " xs ^" }} " *)
       " "^String.concat " " xs ^" "
 
@@ -3504,12 +3809,13 @@ and pp_symterm_node_body m xd sie de stnb : string =
                       ^ String.concat "" 
                           (apply_hom_spec m xd hs (pp_es()))
                       ^")")
-              | Coq _ | Twf _ -> 
+              | Coq _ | Twf _ ->
+	          let pn = qualify_name m xd.xd_imports promoted_pn in
 	          ( match stnb.st_es with
-	          | [] -> promoted_pn
-	          | _  -> 
+	          | [] -> pn
+	          | _  ->
 		      "("
-                      ^ promoted_pn^" "
+                      ^ pn ^ " "
                       ^ String.concat  " " (pp_es())
                       ^ ")"  )
               | Caml _ -> 
@@ -3580,7 +3886,7 @@ and pp_symterm_element_judge_isa_plain m xd sie de p'' stnb'' =
 
 and pp_symterm_element_judge_coq_plain m xd sie de p'' stnb'' =
   let pp_es'' = pp_symterm_elements m xd sie de false p''.prod_es stnb''.st_es in
-  stnb''.st_prod_name ^ " "
+  qualify_name m xd.xd_imports stnb''.st_prod_name ^ " "
   ^ String.concat " " pp_es''
 
 and pp_symterm_element_judge_hol_plain m xd sie de p'' stnb''  =
@@ -4244,23 +4550,42 @@ let extract_quantified_proof_assistant_vars m xd de1 de2 de3 =
   Auxl.remove_duplicates 
     (List.map (function (_,de1i (*(ntmvsns,s,_,_,hol_type_var)*))-> 
       (* FZ put the coq_type computation inside de1 *)
-      let coq_type_pp1 = 
-	(List.map 
-	   (function ((ntmv_root,_),subntr_data) -> 
+      let coq_type_pp1 =
+	(List.map
+	   (function ((ntmv_root,_),_subntr_data) ->
  	     (*Auxl.pp_coq_type_name *)
 	       (pp_nt_or_mv_root_ty m xd (* FZ *)
 		  (Auxl.promote_ntmvr xd
 		     (Auxl.primary_nt_or_mv_of_nt_or_mv xd ntmv_root))))
-           de1i.de1_ntmvsns) in
-      let tmp = 
+           de1i.de1_ntmvsns)
+      in
+      (* For list-tuples we need both:
+         - a Coq *type* string (qualified if imported), used in binders
+         - a stable, unqualified identifier stem for generating Coq names *)
+      let id_pp1 =
+	(List.map
+	   (function ((ntmv_root,_),_subntr_data) ->
+	     match Auxl.primary_nt_or_mv_of_nt_or_mv xd ntmv_root with
+	     | Ntr ntr -> Auxl.promote_ntr xd ntr
+	     | Mvr mvr -> mvr)
+           de1i.de1_ntmvsns)
+      in
+      let tmp_ty =
 	if coq_expand_list
-	then String.concat "_" coq_type_pp1 
-	else String.concat "*" coq_type_pp1 in
-      let coq_type_var = 
-	if coq_expand_list 
-	then "list_" ^tmp 
-	else "list " ^ (if (List.length coq_type_pp1) > 1 then "("^tmp^")" else tmp) in
-      de1i.de1_compound_id,de1i.de1_hol_type_of_compound_id,(coq_type_var,Some tmp )) de1
+	then String.concat "_" coq_type_pp1
+	else String.concat "*" coq_type_pp1
+      in
+      let tmp_id =
+	if coq_expand_list
+	then String.concat "_" id_pp1
+	else String.concat "*" id_pp1
+      in
+      let coq_type_var =
+	if coq_expand_list
+	then "list_" ^ tmp_id
+	else "list " ^ (if (List.length coq_type_pp1) > 1 then "(" ^ tmp_ty ^ ")" else tmp_ty)
+      in
+      de1i.de1_compound_id, de1i.de1_hol_type_of_compound_id, (coq_type_var, Some tmp_id)) de1
      @ 
        List.map
 	 (function (_,(_,i,_)) ->

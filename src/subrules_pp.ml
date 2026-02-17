@@ -52,7 +52,20 @@ we're carving out a predicate of
 let non_free_ntrs : pp_mode -> syntaxdefn -> subrule list -> (nontermroot * nontermroot) list =
   fun m xd srs ->
       
-    let rs = List.filter (function r -> (not r.rule_meta)&& (Auxl.hom_spec_for_pp_mode m r.rule_homs = None)) xd.xd_rs  in 
+    (* Imported modules are compiled separately; in an importing module run, we
+       should only compute subrule predicates from the *local* rules that will
+       be emitted. Otherwise imported rules can become "non-free" (because they
+       mention local subrules) and we end up emitting predicates over imported
+       types that are not defined in this module's output. *)
+    let ic = xd.xd_imports in
+    let rs =
+      List.filter
+        (fun r ->
+          (not r.rule_meta)
+          && (Auxl.hom_spec_for_pp_mode m r.rule_homs = None)
+          && not (Import.is_imported_loc ic r.rule_loc))
+        xd.xd_rs
+    in
     
     let mentions : (nontermroot * NtrSet.t) list =
       List.map 
@@ -127,7 +140,7 @@ let pp_subrules m xd srs : int_funcs_collapsed =
             (function sr -> 
               (sr.sr_lower=ntrpl || sr.sr_lower=primary_ntrpl) && 
               sr.sr_upper=ntrpu)
-            xd.xd_srs
+            srs
         in
         
         (* Use unique name if provided, otherwise use default *)
@@ -556,4 +569,3 @@ let pp_subrules m xd srs : int_funcs_collapsed =
 		      ( function ntr_lower,ntr_upper -> pp_subrule ntr_lower ntr_upper )
 		      non_free_ntrs));
       i_funcs_proof = None }
-
