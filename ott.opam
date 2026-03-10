@@ -26,6 +26,7 @@ run-test: [
   [make "-C" "tests/menhir_tests/test10menhir"]
   [make "-C" "tests/menhir_tests/test10menhir_with_aux_args"]
   [make "-C" "tests/menhir_tests/test10menhir_with_aux_rules"]
+  [make "-C" "tests/menhir_tests/test_case_collision"]
 ]
 dev-repo: "git+https://github.com/ott-lang/ott.git"
 synopsis: "A tool for writing definitions of programming languages and calculi"

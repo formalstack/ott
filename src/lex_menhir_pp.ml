@@ -513,8 +513,44 @@ type element_data = {
   }
 
 let pp_json_key s = "\\\"" ^ s ^ "\\\""
-                  
-let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) (no_json_key : bool) e : element_data = 
+
+let unique_semantic_value_ids semantic_value_ids =
+  let unique_names = Auxl.ensure_unique_names (Auxl.option_map (fun id -> id) semantic_value_ids) in
+  let rec assign semantic_value_ids unique_names =
+    match semantic_value_ids with
+    | [] -> []
+    | None :: semantic_value_ids' ->
+        None :: assign semantic_value_ids' unique_names
+    | Some _ :: semantic_value_ids' ->
+        (match unique_names with
+        | unique_name :: unique_names' ->
+            Some unique_name :: assign semantic_value_ids' unique_names'
+        | [] ->
+            raise (Failure "unique_semantic_value_ids")) in
+  assign semantic_value_ids unique_names
+
+let semantic_value_id_of_element e =
+  match e with
+  | Lang_terminal _ -> None
+  | Lang_nonterm (_,nt) -> Some (menhir_semantic_value_id_of_ntmv nt)
+  | Lang_metavar (_,mv) -> Some (menhir_semantic_value_id_of_ntmv mv)
+  | Lang_list elb -> Some (menhir_semantic_value_id_of_list elb.elb_es)
+  | _ -> raise (Failure "unexpected Lang_ form")
+
+let required_semantic_value_id kind = function
+  | Some id -> id
+  | None -> raise (Failure ("missing semantic value id for " ^ kind))
+
+let pp_pretty_rhs_if_not_suppressed homs rhs =
+  match Auxl.hom_spec_for_hom_name "pp-suppress" homs with
+  | Some _ -> None
+  | None -> Some rhs
+
+let rec element_data_of_elements xd ts (allow_lists:bool) (indent_nonterms:bool) (no_json_key : bool) es =
+  let semantic_value_ids = unique_semantic_value_ids (List.map semantic_value_id_of_element es) in
+  List.map2 (element_data_of_element xd ts allow_lists indent_nonterms no_json_key) semantic_value_ids es
+
+and element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) (no_json_key : bool) semantic_value_id e : element_data = 
 (*string option(*semantic_value_id*) * string(*grammar body*) * string option (*semantic action*) =*)
   match e with
   | Lang_terminal t -> 
@@ -526,7 +562,7 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
         pp_pretty_rhs     = Some ("string \"" ^ String.escaped t ^ "\""); }
 
   | Lang_nonterm (ntr,nt) ->
-      let svi = menhir_semantic_value_id_of_ntmv nt in 
+      let svi = required_semantic_value_id "Lang_nonterm" semantic_value_id in
       (* Check if this nonterminal is suppressed due to subrules *)
       let subrule_opt = 
         try Some (List.find (function sr -> sr.sr_lower = ntr) xd.xd_srs) 
@@ -535,6 +571,9 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
         match subrule_opt with
         | Some sr -> (sr.sr_top, Some ("is_" ^ ntr ^ "_of_" ^ sr.sr_top))
         | None -> (ntr, None) in
+      let actual_rule = Auxl.rule_of_ntr_nonprimary xd actual_ntr in
+      let params = pp_params actual_rule in
+      let pp_arg = params ^ " " ^ svi in
       let actual_semantic_action = 
         match runtime_check with
         | Some check -> Some ("(if " ^ check ^ " " ^ svi ^ " then " ^ svi ^ " else raise Parsing.Parse_error)")
@@ -542,45 +581,39 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
       { semantic_value_id = Some svi;
         grammar_body      = menhir_nonterminal_id_of_ntr actual_ntr;
         semantic_action   = actual_semantic_action;
-        pp_raw_rhs        = Some (pp_pp_raw_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi);
+        pp_raw_rhs        = Some (pp_pp_raw_name actual_ntr ^ pp_arg);
         pp_json_rhs       = Some (
                                 (if no_json_key then
                                   ""
                                 else
                                   "string \"" ^ pp_json_key (Grammar_pp.pp_plain_nonterm nt)  ^ ":\" ^^ ")
-                                ^ pp_pp_json_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi);
-        pp_pretty_rhs     
-          = match Auxl.hom_spec_for_hom_name "pp-suppress" (Auxl.rule_of_ntr_nonprimary xd actual_ntr).rule_homs with 
-          | Some hs ->
-              None
-          | None -> 
-              if indent_nonterms then
-                Some ("nest 2 (" ^ pp_pp_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi ^")")
-              else
-                Some ("" ^ pp_pp_name actual_ntr ^ pp_params (Auxl.rule_of_ntr_nonprimary xd actual_ntr) ^ " " ^ svi ^"";) }
+                                ^ pp_pp_json_name actual_ntr ^ pp_arg);
+        pp_pretty_rhs     =
+          pp_pretty_rhs_if_not_suppressed actual_rule.rule_homs
+            (if indent_nonterms then
+               "nest 2 (" ^ pp_pp_name actual_ntr ^ pp_arg ^")"
+             else
+               pp_pp_name actual_ntr ^ pp_arg) }
 
   | Lang_metavar (mvr,mv) -> (* assuming all metavars map onto string-containing tokens *)
-      let svi = menhir_semantic_value_id_of_ntmv mv in 
+      let svi = required_semantic_value_id "Lang_metavar" semantic_value_id in
+      let mvd = Auxl.mvd_of_mvr_nonprimary xd mvr in
       { semantic_value_id = Some svi;
         grammar_body      = token_of_metavarroot ts mvr;
         semantic_action   = Some svi;
         pp_raw_rhs        = Some (pp_pp_raw_name mvr ^ " " ^ svi);
         pp_json_rhs       = Some ( "string \"" ^ pp_json_key (Grammar_pp.pp_plain_metavar mv) ^ " : \" ^^ " ^ pp_pp_json_name mvr ^ " " ^ svi);
-        pp_pretty_rhs     
-          = match Auxl.hom_spec_for_hom_name "pp-suppress" (Auxl.mvd_of_mvr_nonprimary xd mvr).mvd_rep with 
-          | Some hs ->
-              None
-          | None -> 
-              Some (pp_pp_name mvr ^ " " ^ svi); }
+        pp_pretty_rhs     = pp_pretty_rhs_if_not_suppressed mvd.mvd_rep (pp_pp_name mvr ^ " " ^ svi); }
 (*        pp_raw_rhs        = Some (" string \"\\\"\" ^^ string " ^ svi ^ " ^^ string \"\\\"\"");
         pp_pretty_rhs     = "string "^ svi ; }
  *)
       
   | Lang_list elb -> 
       if not allow_lists then raise (Failure "unexpected list form");
-      let element_data = List.map (element_data_of_element xd ts false true indent_nonterms ) elb.elb_es in 
+      let element_data = element_data_of_elements xd ts false true indent_nonterms elb.elb_es in 
       
-      let svi = menhir_semantic_value_id_of_list elb.elb_es in      
+      let svi = required_semantic_value_id "Lang_list" semantic_value_id in
+      let element_svis = Auxl.option_map (function x -> x.semantic_value_id) element_data in      
 
       let body = 
         let list_grammar_constructor body = 
@@ -611,39 +644,41 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
           | _ -> 
               Printf.sprintf "tuple%d(%s)" (List.length element_data) (String.concat "," (List.map (function x->x.grammar_body) element_data))) in
         list_grammar_constructor body0 in
-
+      
+      let pat = "(" ^ String.concat "," element_svis ^")" in
       let action = 
         (* if need be (but not otherwise) project out unit elements from terminals within list *)
         if List.exists (function x-> x.semantic_value_id = None)  element_data  then 
-          let pat = String.concat "," (List.map (function x -> match x.semantic_value_id with Some svi->svi | None->"()") element_data) in
-          let rhs = String.concat "," (Auxl.option_map (function x -> x.semantic_value_id) element_data) in
+          let pat =
+            String.concat ","
+              (List.map
+                 (function x -> match x.semantic_value_id with Some svi->svi | None->"()")
+                 element_data) in
+          let rhs = String.concat "," element_svis in
           "List.map (function ("^pat^") -> ("^rhs^")) "^svi
         else 
           svi  in
-      
-      let pat = "(" ^ String.concat "," (Auxl.option_map (function x -> x.semantic_value_id) element_data) ^")" in
 
+      let list_map rhs = "List.map (function "^pat^" -> "^rhs^") " ^ svi in
+      
       let pp_raw_rhs = 
         let rhs_data = Auxl.option_map (function x-> x.pp_raw_rhs) element_data in
         let rhs =  "string \"(\" ^^ " ^ String.concat  " ^^ string \",\" ^^ " rhs_data ^ " ^^ string \")\"" in
-        let f = "(function "^pat^" -> "^rhs^")" in
-        let pper = "string \"[\" ^^ separate  (string \";\") (List.map " ^ f ^ " " ^ svi ^")" ^" ^^ string \"]\"" in
+        let pper = "string \"[\" ^^ separate  (string \";\") (" ^ list_map rhs ^ ")" ^" ^^ string \"]\"" in
         pper in
 
       let pp_json_rhs = 
         let rhs_data = Auxl.option_map (function x-> x.pp_json_rhs) element_data in
         let rhs =  "string \"\" ^^ " ^ String.concat  " ^^ string \",\" ^^ " rhs_data ^ " ^^ string \"\"" in
-        let f = "(function "^pat^" -> "^rhs^")" in
-        let pper = "string \"\\\"list\\\" : [\" ^^ separate  (string \",\") (List.map " ^ f ^ " " ^ svi ^")" ^" ^^ string \"]\"" in
+        let pper = "string \"\\\"list\\\" : [\" ^^ separate  (string \",\") (" ^ list_map rhs ^ ")" ^" ^^ string \"]\"" in
         pper in
 
       
       let pp_pretty_rhs = 
         let rhs_data = Auxl.option_map (function x-> x.pp_pretty_rhs) element_data in
         let rhs =  String.concat  " ^^ string \" \" ^^ " rhs_data in
-        let f = "(function "^pat^" -> "^rhs^")" in
         let sep = match elb.elb_tmo with Some t -> "(string \""^String.escaped t^"\")" | None -> "(break 1)" in
-        let pper = "group(separate " ^  sep ^ " (List.map " ^ f ^ " " ^ svi ^ "))" in
+        let pper = "group(separate " ^  sep ^ " (" ^ list_map rhs ^ "))" in
         pper in
 
       { semantic_value_id = Some svi;
@@ -654,35 +689,11 @@ let rec element_data_of_element xd ts (allow_lists:bool) (indent_nonterms:bool) 
         pp_pretty_rhs     = Some pp_pretty_rhs ; }
         
   | _ -> raise (Failure "unexpected Lang_ form")
-        
-
-(* ensure unique names for production elements by adding numeric suffixes when needed *)
-let ensure_unique_element_names element_data =
-  (* Extract the names, apply uniqueness, then update the elements *)
-  let names = Auxl.option_map (fun elem -> elem.semantic_value_id) element_data in
-  let unique_names = Auxl.ensure_unique_names names in
-  
-  (* Now update the elements with the unique names *)
-  let name_pairs = List.combine names unique_names in
-  let name_index = ref 0 in
-  
-  List.map (fun elem ->
-    match elem.semantic_value_id with
-    | None -> elem
-    | Some id ->
-        let unique_id = List.nth unique_names !name_index in
-        incr name_index;
-        if unique_id = id then elem
-        else { elem with 
-               semantic_value_id = Some unique_id;
-               semantic_action = Some unique_id })
-    element_data
 
 let element_data_of_prod xd ts p =
   (* try indenting nonterms iff this production has a top-level terminal *)
   let indent_nonterms = List.exists (function | Lang_terminal _ -> true | _ -> false) p.prod_es in 
-  let element_data = List.map (element_data_of_element xd ts true indent_nonterms false) p.prod_es in
-  ensure_unique_element_names element_data
+  element_data_of_elements xd ts true indent_nonterms false p.prod_es
 
 
 let pp_menhir_prod_grammar element_data = 
@@ -789,25 +800,31 @@ let pp_menhir_prod yo generate_aux_info_here xd ts r p =
     let element_data = element_data_of_prod xd ts p in 
     let element_data' = element_data @ if generate_aux_info_for_prod generate_aux_info_here r p then [aux_constructor_element] else [] in
     let ppd_action = 
-      let es' = Grammar_pp.apply_hom_order (Menhir yo) xd p in
       if p.prod_sugar || (has_hom "quotient-remove" p.prod_homs && has_hom "ocaml" p.prod_homs) || r.rule_phantom || has_hom "ocaml" r.rule_homs then 
         (* ocaml hom case *)
         (* to do the proper escaping of nonterms within the hom, we need to pp here, not reuse the standard machinery *)
 "(*Case 1*) " ^ 
         let hs = (match Auxl.hom_spec_for_hom_name "ocaml" p.prod_homs with Some hs -> hs | None -> raise (Failure ("no ocaml hom for "^p.prod_name))) in
-        let es'' =  (* remove terminals from es to get Hom_index indexing right *)
-      	(List.filter
-           (function 
-             | (Lang_nonterm (_,_)|Lang_metavar (_,_)|Lang_list _) -> true
-             | Lang_terminal _ -> false
-             | (Lang_option _|Lang_sugaroption _) -> 
-               raise (Invalid_argument "com for prods with option or sugaroptions not implemented"))
-           es') in
+        let element_data_hom_order =
+          let filtered_element_data =
+            List.filter
+              (function
+                | { semantic_value_id = Some _; _ } -> true
+                | { semantic_value_id = None; _ } -> false)
+              element_data in
+          try
+            let oh = List.assoc "order" p.prod_homs in
+            let ohi = Auxl.option_map (fun hse -> match hse with Hom_index i -> Some i | _ -> None) oh in
+            List.map (fun i -> List.nth filtered_element_data i) ohi
+          with Not_found ->
+            filtered_element_data in
         let pp_menhir_hse hse = 
           match hse with
           | Hom_string s ->  s
           (* TODO, arbitrary failure? *)
-          | Hom_index i -> let e = List.nth es'' (*or es? *) i  in let d=element_data_of_element xd ts true false false e in (match d.semantic_action with Some s -> s | None -> raise (Failure ("pp_menhir_hse Hom_index " ^ string_of_int i ^ " at " ^ Location.pp_loc p.prod_loc)))
+          | Hom_index i ->
+              let d = List.nth element_data_hom_order i in
+              (match d.semantic_action with Some s -> s | None -> raise (Failure ("pp_menhir_hse Hom_index " ^ string_of_int i ^ " at " ^ Location.pp_loc p.prod_loc)))
           | Hom_terminal s -> s
           | Hom_ln_free_index (mvs,s) -> raise (Failure "Hom_ln_free_index not implemented")  in
         String.concat "" (List.map pp_menhir_hse hs)
@@ -1318,4 +1335,3 @@ let pp_pp_syntaxdefn m sources xd_quotiented xd_unquotiented xd_quotiented_unaux
                       ^ pp_pp_json_metavar_defns_and_rules yo generate_aux_info xd ts xd.xd_mds xd.xd_rs
                    );
   close_out fd;
-
