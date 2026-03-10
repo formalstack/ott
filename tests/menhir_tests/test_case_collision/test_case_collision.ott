@@ -1,0 +1,13 @@
+indexvar index, i ::=
+  {{ rocq nat }}
+  {{ ocaml int }}
+
+grammar
+
+tag, T :: 'tag_' ::=
+  | x :: :: x
+
+ty, t :: 'ty_' ::= {{ menhir-start }}
+  | unit    :: :: unit
+  | sum T t :: :: sum
+  | sums ( </ Ti ti // i /> ) :: :: sums
