@@ -1,0 +1,7 @@
+import lib :: 'transitive_provider.ott' ::=
+{{ ocaml Transitive_provider_ast }}
+  | term
+
+grammar
+wrapped :: 'Wrapped_' ::= {{ menhir-start }}
+  | term :: :: wrap

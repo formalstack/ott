@@ -1,0 +1,10 @@
+import lib :: 'lib.ott' ::= {{ rocq Lib }}
+  | ext :: E
+
+grammar
+
+use, u :: 'use_' ::= {{ menhir-suppress }}
+  | E :: :: from_lib
+
+ext, ex :: 'ext_local_' ::= {{ menhir-suppress }}
+  | unit :: :: unit

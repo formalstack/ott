@@ -1,0 +1,5 @@
+grammar
+t :: 'T_' ::=
+  | 'x'     :: :: x
+  | ( t )   :: M :: paren_t  {{ rocq [[t]] }}
+

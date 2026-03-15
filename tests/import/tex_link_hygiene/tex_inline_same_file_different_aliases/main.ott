@@ -1,0 +1,5 @@
+import lib_a :: 'lib_a.ott' ::=
+  | use_a
+
+import lib_b :: 'lib_b.ott' ::=
+  | use_b

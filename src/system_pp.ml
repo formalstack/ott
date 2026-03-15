@@ -63,12 +63,17 @@ let pp_auxiliary_lemmas m xd =
 (* EXPERIMENTAL EXPERIMENTAL EXPERIMENTAL EXPERIMENTAL EXPERIMENTAL EXPERIMENTAL *)
 
 let pp_functions_locally_nameless fd m sd xd_transformed =
+  let ic = xd_transformed.xd_imports in
+  let not_imported_loc get_loc x = not (Import.is_imported_loc ic (get_loc x)) in
+  let local_srs = List.filter (not_imported_loc (fun sr -> sr.sr_loc)) xd_transformed.xd_srs in
+  let local_sbs = List.filter (not_imported_loc (fun sb -> sb.sb_loc)) xd_transformed.xd_sbs in
+  let local_fvs = List.filter (not_imported_loc (fun fv -> fv.fv_loc)) xd_transformed.xd_fvs in
   let funcs_open = Ln_transform.pp_open m xd_transformed in
-  let funcs_subrules = Subrules_pp.pp_subrules m xd_transformed xd_transformed.xd_srs in
+  let funcs_subrules = Subrules_pp.pp_subrules m xd_transformed local_srs in
   (* let auxfns = Substs_pp.pp_auxfns m sd.syntax in *)
   let arities = Ln_transform.pp_arities m sd.syntax xd_transformed in
-  let substs = Ln_transform.pp_substs m xd_transformed xd_transformed.xd_sbs in
-  let freevars = Ln_transform.pp_freevars m xd_transformed xd_transformed.xd_fvs in
+  let substs = Ln_transform.pp_substs m xd_transformed local_sbs in
+  let freevars = Ln_transform.pp_freevars m xd_transformed local_fvs in
   (* let contexts = Context_pp.pp_context m sd.syntax xd_transformed.xd_crs in *)
   let library = 
     ( match m with
@@ -178,6 +183,7 @@ let pp_systemdefn_core_locally_nameless fd m sd lookup =
   let xd_ln_transformed = Ln_transform.ln_transform_syntaxdefn m sd.syntax in
   let relations_ln_transformed = Ln_transform.ln_transform_fun_or_reln_defnclass_list m sd.syntax sd.relations in 
   let lookup_ln = Term_parser.make_parser xd_ln_transformed in
+  let ic_ln = xd_ln_transformed.xd_imports in
   prepare_whole_file_embed_side_effects m sd.syntax lookup sd.syntax.xd_embed_preamble sd.syntax.xd_embed;
   apply_rule_embed_side_effects m xd_ln_transformed lookup xd_ln_transformed.xd_rs;
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed_preamble;
@@ -190,14 +196,23 @@ let pp_systemdefn_core_locally_nameless fd m sd lookup =
   pp_functions_locally_nameless fd m sd xd_ln_transformed;
   Embed_pp.pp_embeds fd m sd.syntax lookup sd.syntax.xd_embed;
   output_string fd ("\n");
+  let local_relations_ln =
+    List.filter
+      (fun frdc ->
+         let loc = match frdc with FDC fdc -> fdc.fdc_loc | RDC dc -> dc.dc_loc in
+         not (Import.is_imported_loc ic_ln loc))
+      relations_ln_transformed
+  in
   Defns.pp_fun_or_reln_defnclass_list fd
-      m xd_ln_transformed (Term_parser.make_parser xd_ln_transformed) relations_ln_transformed;
+      m xd_ln_transformed (Term_parser.make_parser xd_ln_transformed) local_relations_ln;
   output_string fd ("\n");
   output_string fd (Ln_transform.ln_infrastructure m xd_ln_transformed relations_ln_transformed);
   output_string fd ("\n");
   ( match m with
   | Coq co when not co.coq_expand_lists ->
-	let ip = Coq_induct.pp_induction m xd_ln_transformed xd_ln_transformed.xd_rs in
+      let local_rs_ln = List.filter (fun r ->
+        not (Import.is_imported_loc ic_ln r.rule_loc)) xd_ln_transformed.xd_rs in
+	let ip = Coq_induct.pp_induction m xd_ln_transformed local_rs_ln in
 	if ip <> "" then begin 
           output_string fd (Auxl.big_line_comment m "induction principles");
           output_string fd ip;
@@ -207,11 +222,22 @@ let pp_systemdefn_core_locally_nameless fd m sd lookup =
 (* END EXPERIMENTAL END EXPERIMENTAL END EXPERIMENTAL END EXPERIMENTAL END EXPERIMENTAL END EXPERIMENTAL *)
 
 let pp_functions fd m sd lookup =
-  let funcs_subrules = Subrules_pp.pp_subrules m sd.syntax sd.syntax.xd_srs in
-  let auxfns = Substs_pp.pp_auxfns m sd.syntax sd.syntax.xd_axs in
-  let substs = Substs_pp.pp_substs m sd.syntax sd.syntax.xd_sbs in
-  let freevars = Substs_pp.pp_freevars m sd.syntax sd.syntax.xd_fvs in
-  let contexts = Context_pp.pp_context m sd.syntax lookup sd.syntax.xd_crs in
+  let xd = sd.syntax in
+  let ic = xd.xd_imports in
+  let not_imported_loc get_loc x = not (Import.is_imported_loc ic (get_loc x)) in
+  let local_srs = List.filter (not_imported_loc (fun sr -> sr.sr_loc)) xd.xd_srs in
+  let local_axs = List.filter (fun (f, (ntrs, _)) ->
+    not (List.exists (fun ntr ->
+      try Import.is_imported_loc ic (Auxl.rule_of_ntr xd ntr).rule_loc
+      with Not_found -> false) ntrs)) xd.xd_axs in
+  let local_sbs = List.filter (not_imported_loc (fun sb -> sb.sb_loc)) xd.xd_sbs in
+  let local_fvs = List.filter (not_imported_loc (fun fv -> fv.fv_loc)) xd.xd_fvs in
+  let local_crs = List.filter (not_imported_loc (fun cr -> cr.cr_loc)) xd.xd_crs in
+  let funcs_subrules = Subrules_pp.pp_subrules m xd local_srs in
+  let auxfns = Substs_pp.pp_auxfns m xd local_axs in
+  let substs = Substs_pp.pp_substs m xd local_sbs in
+  let freevars = Substs_pp.pp_freevars m xd local_fvs in
+  let contexts = Context_pp.pp_context m xd lookup local_crs in
   let library = 
     ( match m with
     | Isa io -> fst (!(io.isa_library))
@@ -382,12 +408,16 @@ let pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup string
 let pp_systemdefn_core_preserving_structure fd m sd embed_syntax lookup =
   let xd_expanded, structure_expanded = 
     Transform.expand_lists_in_syntaxdefn m sd.syntax sd.structure in (* identity if m <> Coq *)
+  let ic = xd_expanded.xd_imports in
+  let local_structure =
+    List.filter (fun (fn, _) -> not (Import.is_imported_file ic fn)) structure_expanded
+  in
   let string_of_rule_embeds = Embed_pp.string_of_embeds m embed_syntax lookup in
   prepare_whole_file_embed_side_effects m embed_syntax lookup embed_syntax.xd_embed_preamble embed_syntax.xd_embed;
-  prepare_structure_embed_side_effects m xd_expanded lookup structure_expanded;
+  prepare_structure_embed_side_effects m xd_expanded lookup local_structure;
   Embed_pp.pp_embeds fd m embed_syntax lookup embed_syntax.xd_embed_preamble;
   pp_auxiliary_lemmas m xd_expanded;
-  pp_systemdefn_structure fd m sd xd_expanded structure_expanded lookup string_of_rule_embeds embed_syntax;
+  pp_systemdefn_structure fd m sd xd_expanded local_structure lookup string_of_rule_embeds embed_syntax;
   Embed_pp.pp_embeds fd m embed_syntax lookup embed_syntax.xd_embed;
   output_string fd "\n"
 
@@ -442,6 +472,11 @@ let format_require_import th =
   | "Arith" | "Bool" | "List" -> "From Coq Require Import " ^ th ^ "."
   | _ -> "Require Import " ^ th ^ "."
 
+let render_backend_import_block ?(source_files = []) m ic =
+  match Import_backend.render_import_stmts ~source_files m ic with
+  | [] -> ""
+  | stmts -> String.concat "\n" stmts ^ "\n\n"
+
 (* old algorithm, used only when pp with -merge true *)
 let pp_systemdefn fd m sd embed_syntax lookup fn error_on_structure_embeds =
 
@@ -487,6 +522,7 @@ let pp_systemdefn fd m sd embed_syntax lookup fn error_on_structure_embeds =
                      | true -> ["Arith"; "Bool"; "List"]
                      | false -> ["Arith"; "Bool"; "List"; "Ott.ott_list_core"])
       end;
+      output_string fd (render_backend_import_block m sd.syntax.xd_imports);
       pp_systemdefn_core_canonical fd m sd embed_syntax lookup error_on_structure_embeds
   | Twf wo ->
       Printf.fprintf fd "%%%% generated by Ott %s from: %s\n\n" Version.n sd.sources;
@@ -575,13 +611,17 @@ let pp_systemdefn_core_io m sd embed_syntax lookup oi merge_fragments preserve_s
                  ^ "  finite_mapTheory in end;\n\n"
                  ^ "val _ = new_theory \""^fn^"\";\n")]
            | Coq co ->
+               let import_stmts =
+                 render_backend_import_block ~source_files:is m sd.syntax.xd_imports
+               in
                [ Embed_string (dummy_loc,
 	           "(* generated by Ott " ^ Version.n ^ " from: " ^ file_sources ^ " *)\n\n"
-	           ^ String.concat "\n" (List.map format_require_import 
+	           ^ String.concat "\n" (List.map format_require_import
 				           ( match co.coq_expand_lists with
 				           | true -> ["Arith"; "Bool"; "List"]
 				           | false -> ["Arith"; "Bool"; "List"; "Ott.ott_list_core"]))
-                   ^ "\n\n" )]
+                   ^ "\n\n"
+                   ^ import_stmts)]
            | Twf wo ->
                [ Embed_string (dummy_loc,
                  "%% generated by Ott "^Version.n^" from: "^file_sources^" \n" )]
@@ -613,10 +653,13 @@ let pp_systemdefn_core_io m sd embed_syntax lookup oi merge_fragments preserve_s
       (* special case if there is only one i file *)
       match oi with
       | (o,(i::[]))::[] ->
-          let fn = Auxl.filename_check m o in 
+          let fn = Auxl.filename_check m o in
+          let ic = sd.syntax.xd_imports in
+          let local_structure = List.filter (fun (fn, _) ->
+            not (Import.is_imported_file ic fn)) structure_expanded in
           let fd = open_out o in
           let structure_for_file =
-            [std_preamble_embed fn] @ structure_expanded @ std_postamble_embed fn
+            [std_preamble_embed fn] @ local_structure @ std_postamble_embed fn
           in
           prepare_whole_file_embed_side_effects m embed_syntax lookup embed_syntax.xd_embed_preamble embed_syntax.xd_embed;
           prepare_structure_embed_side_effects m xd_expanded lookup structure_for_file;

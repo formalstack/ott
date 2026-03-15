@@ -1,0 +1,17 @@
+import lib :: 'lib.ott' ::=
+{{ ocaml Lib_ast }}
+  | term
+  | ident
+
+grammar
+wrapped :: 'Wrapped_' ::=
+  | term :: :: wrap
+
+embed {{ ocaml
+let use_term (u : Lib_ast.term) : wrapped = Wrapped_wrap u
+
+let keep_local_name () =
+  let term = 0 in
+  let label = "term" in
+  (term, label)
+}}

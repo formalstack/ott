@@ -1,0 +1,13 @@
+grammar
+
+value, v :: 'DepVal_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+defns
+Dep :: '' ::=
+
+defn
+store_ok <- v :: :: store_ok :: store_ok_ by
+
+------------ :: ok
+store_ok <- v

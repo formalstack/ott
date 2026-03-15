@@ -1,0 +1,7 @@
+import bottom :: 'bottom.ott' ::=
+{{ ocaml Bottom_ast }}
+  | atom
+
+grammar
+right_term, r :: 'Right_' ::= {{ menhir-public }}
+  | atom :: :: use_atom

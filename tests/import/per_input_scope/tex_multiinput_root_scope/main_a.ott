@@ -1,0 +1,4 @@
+import dep :: 'dep.ott' ::=
+  | Dep :: Dep_q
+  | v :: q
+  | store_ok :: store_ok_q

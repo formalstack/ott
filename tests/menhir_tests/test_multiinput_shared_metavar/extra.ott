@@ -1,0 +1,4 @@
+grammar
+
+beta, b :: 'beta_' ::= {{ menhir-start }}
+  | x :: :: var

@@ -69,6 +69,100 @@ let pp_list_all m = match m with
 
 let rn_formula="formula"
 
+let filename_of_loc (l : loc) : string option =
+  match l with
+  | [] -> None
+  | loc1 :: _ -> Some loc1.Location.loc_start.Lexing.pos_fname
+
+let with_loc_source_context (l : loc) (f : unit -> 'a) : 'a =
+  Import.with_current_source_file (filename_of_loc l) f
+
+let rec ntrs_in_symterm (st : symterm) : string list =
+  match st with
+  | St_node (_l, stnb) ->
+    let ntr = stnb.st_rule_ntr_name in
+    let judgement_choice =
+      if ntr = "judgement" then [stnb.st_prod_name] else []
+    in
+    ntr :: judgement_choice @ List.concat_map ntrs_in_symterm_element stnb.st_es
+  | St_nonterm (_l, ntrroot, (ntr', _suff)) -> [ntrroot; ntr']
+  | St_nontermsub (_l, ntrroot_lower, ntrroot_top, (ntr', _suff)) ->
+    [ntrroot_lower; ntrroot_top; ntr']
+  | St_uninterpreted _ -> []
+
+and ntrs_in_symterm_element (ste : symterm_element) : string list =
+  match ste with
+  | Ste_st (_l, st) -> ntrs_in_symterm st
+  | Ste_metavar _ | Ste_var _ -> []
+  | Ste_list (_l, stlis) -> List.concat_map ntrs_in_symterm_list_item stlis
+
+and ntrs_in_symterm_list_item (stli : symterm_list_item) : string list =
+  match stli with
+  | Stli_single (_l, stes) -> List.concat_map ntrs_in_symterm_element stes
+  | Stli_listform stlb -> List.concat_map ntrs_in_symterm_element stlb.stl_elements
+
+let rec judgements_in_symterm (st : symterm) : string list =
+  let strip_judgement_prefix (s : string) : string =
+    let pref = "judgement_" in
+    let ls = String.length s and lp = String.length pref in
+    if ls >= lp && String.sub s 0 lp = pref then
+      String.sub s lp (ls - lp)
+    else s
+  in
+  match st with
+  | St_node (_l, stnb) ->
+    let here =
+      if stnb.st_rule_ntr_name = "judgement" then
+        [strip_judgement_prefix stnb.st_prod_name]
+      else []
+    in
+    here @ List.concat_map judgements_in_symterm_element stnb.st_es
+  | St_nonterm (_l, ntrroot, (ntr', _suff)) ->
+    if ntrroot = "judgement" then [strip_judgement_prefix ntr'] else []
+  | St_nontermsub (_l, ntrroot_lower, ntrroot_top, (ntr', _suff)) ->
+    if ntrroot_lower = "judgement" || ntrroot_top = "judgement" then
+      [strip_judgement_prefix ntr']
+    else []
+  | St_uninterpreted _ -> []
+
+and judgements_in_symterm_element (ste : symterm_element) : string list =
+  match ste with
+  | Ste_st (_l, st) -> judgements_in_symterm st
+  | Ste_metavar _ | Ste_var _ -> []
+  | Ste_list (_l, stlis) -> List.concat_map judgements_in_symterm_list_item stlis
+
+and judgements_in_symterm_list_item (stli : symterm_list_item) : string list =
+  match stli with
+  | Stli_single (_l, stes) -> List.concat_map judgements_in_symterm_element stes
+  | Stli_listform stlb -> List.concat_map judgements_in_symterm_element stlb.stl_elements
+
+let check_formula_scope (xd : syntaxdefn) (l : loc) (st : symterm) : unit =
+  if Import.is_imported_loc xd.xd_imports l then ()
+  else
+    match filename_of_loc l with
+    | None -> ()
+    | Some fn ->
+      (match Import.lookup_scope_info xd.xd_imports fn with
+       | None -> ()
+       | Some scope_info ->
+         let allowed_set = StringSet.of_list scope_info.si_allowed_judgement_roots in
+         let js = judgements_in_symterm st in
+         let strip_judgement_prefix (s : string) : string =
+           let pref = "judgement_" in
+           let ls = String.length s and lp = String.length pref in
+           if ls >= lp && String.sub s 0 lp = pref then
+             String.sub s lp (ls - lp)
+           else s
+         in
+         List.iter (fun j0 ->
+           let j = strip_judgement_prefix j0 in
+           if not (StringSet.mem j allowed_set) then
+             Auxl.error (Some l)
+               ("Illegal reference to judgement class '" ^ j ^ "'.\n"
+                ^ "This judgement is only available transitively via imports.\n"
+                ^ "If you want to use it in premises/conclusions, import its defns explicitly.\n")
+         ) js)
+
 (** ******************************** *)
 (** pretty printing of definitions   *)
 (** ******************************** *)
@@ -234,7 +328,7 @@ let pp_drule fd (m:pp_mode) (xd:syntaxdefn) (dr:drule) : unit =
             ^ String.concat "" (Grammar_pp.apply_hom_spec m xd hs [])
             ^ "}") in
       Printf.fprintf fd "\\newcommand{%s}[1]{%s[#1]{%%\n"
-        (Grammar_pp.tex_drule_name m dr.drule_name)
+        (Grammar_pp.tex_drule_name m (Grammar_pp.tex_command_key xd.xd_imports dr.drule_name))
         (Grammar_pp.pp_tex_DRULE_NAME m);
       List.iter
         (fun p-> Printf.fprintf fd "%s{%s}%%\n" (Grammar_pp.pp_tex_PREMISE_NAME m) p)
@@ -243,7 +337,7 @@ let pp_drule fd (m:pp_mode) (xd:syntaxdefn) (dr:drule) : unit =
       output_string fd ppd_conclusion;
       Printf.fprintf fd "}{%%\n{%s{%s}}{%s}%%\n}}\n"
         (Grammar_pp.pp_tex_DRULE_NAME_NAME m)
-        (Auxl.pp_tex_escape dr.drule_name)
+        (Auxl.pp_tex_escape (Grammar_pp.tex_surface_name xd.xd_imports dr.drule_name))
         pp_com
   | Isa _ | Hol _ | Lem _ | Coq _ | Twf _ ->
       let non_free_ntrs = Subrules_pp.non_free_ntrs m xd xd.xd_srs in
@@ -518,10 +612,11 @@ let pp_defn fd (m:pp_mode) (xd:syntaxdefn) lookup (defnclass_wrapper:string) (un
       let p = Auxl.prod_of_prodname xd prod_name in
       let es = p.prod_es in 
       let pp_com = Grammar_pp.pp_com_es m xd d.d_homs es  in
-      Printf.fprintf fd "%%%% defn %s\n" d.d_name;
+      let d_name_surface = Grammar_pp.tex_surface_name xd.xd_imports d.d_name in
+      Printf.fprintf fd "%%%% defn %s\n" d_name_surface;
       iter_sep (pp_processed_semiraw_rule fd m xd) "\n\n" d.d_rules;
       Printf.fprintf fd "\n\\newcommand{%s}[1]{\\begin{%s}[#1]{$%s$}{%s}\n"
-        (Grammar_pp.tex_defn_name m defnclass_wrapper d.d_name)
+        (Grammar_pp.tex_defn_name m "" (Grammar_pp.tex_command_key xd.xd_imports (defnclass_wrapper ^ d.d_name)))
         (Grammar_pp.pp_tex_DEFN_BLOCK_NAME m)
         (Grammar_pp.pp_symterm m xd [] de_empty d.d_form)
         pp_com;
@@ -529,7 +624,7 @@ let pp_defn fd (m:pp_mode) (xd:syntaxdefn) lookup (defnclass_wrapper:string) (un
         | PSR_Rule dr -> 
             Printf.fprintf fd "%s{%s{}"
               (Grammar_pp.pp_tex_USE_DRULE_NAME m)
-              (Grammar_pp.tex_drule_name m dr.drule_name);
+              (Grammar_pp.tex_drule_name m (Grammar_pp.tex_command_key xd.xd_imports dr.drule_name));
             if (xo.ppt_show_categories &&
                not (StringSet.is_empty dr.drule_categories)) then begin
               output_string fd "\\quad\\textsf{[";
@@ -545,6 +640,7 @@ let pp_defn fd (m:pp_mode) (xd:syntaxdefn) lookup (defnclass_wrapper:string) (un
 
             
 let pp_defnclass fd (m:pp_mode) (xd:syntaxdefn) lookup (dc:defnclass) =
+  with_loc_source_context dc.dc_loc (fun () ->
   let universe = match Auxl.hom_spec_for_hom_name "rocq-universe" dc.dc_homs with
     | Some hs -> Grammar_pp.pp_hom_spec m xd hs
     | None -> "Prop" in
@@ -661,12 +757,17 @@ let pp_defnclass fd (m:pp_mode) (xd:syntaxdefn) lookup (dc:defnclass) =
   | Caml _ | Lex _ | Menhir _ -> ()
 
   | Tex _ ->
-      Printf.fprintf fd "%% defns %s\n" dc.dc_name;
+      let dc_name_surface = Grammar_pp.tex_surface_name xd.xd_imports dc.dc_name in
+      Printf.fprintf fd "%% defns %s\n" dc_name_surface;
       List.iter (fun d -> pp_defn fd m xd lookup dc.dc_wrapper universe d) dc.dc_defns;
-      Printf.fprintf fd "\n\\newcommand{%s}{\n" (Grammar_pp.tex_defnclass_name m dc.dc_name);
-      List.iter (fun d -> output_string fd (Grammar_pp.tex_defn_name m dc.dc_wrapper d.d_name);
+      Printf.fprintf fd "\n\\newcommand{%s}{\n"
+        (Grammar_pp.tex_defnclass_name m (Grammar_pp.tex_command_key xd.xd_imports dc.dc_name));
+      List.iter (fun d ->
+        output_string fd
+          (Grammar_pp.tex_defn_name m "" (Grammar_pp.tex_command_key xd.xd_imports (dc.dc_wrapper ^ d.d_name)));
                           output_string fd "{}") dc.dc_defns;
       output_string fd "}\n\n"
+  )
 
 (**********************************************)
 (* pp of fundefns                             *)
@@ -851,8 +952,9 @@ let pp_fundefn (m:pp_mode) (xd:syntaxdefn) lookup (fd:fundefn) : string =
       let p = Auxl.prod_of_prodname xd prod_name in
       let es = p.prod_es in 
       let pp_com = Grammar_pp.pp_com_es m xd fd.fd_homs es  in
-      "% fundefn "^fd.fd_name^"\n"
-      ^ "\n\\newcommand{"^Grammar_pp.tex_fundefn_name m fd.fd_name^"}[1]{"
+      let fd_name_surface = Grammar_pp.tex_surface_name xd.xd_imports fd.fd_name in
+      "% fundefn "^fd_name_surface^"\n"
+      ^ "\n\\newcommand{"^Grammar_pp.tex_fundefn_name m (Grammar_pp.tex_command_key xd.xd_imports fd.fd_name)^"}[1]{"
       ^ "\\begin{"^Grammar_pp.pp_tex_FUNDEFN_BLOCK_NAME m ^"}[#1]{$" 
       ^ Grammar_pp.pp_symterm m xd [] de_empty fd.fd_form 
       ^ "$}{"
@@ -867,6 +969,7 @@ let pp_fundefn (m:pp_mode) (xd:syntaxdefn) lookup (fd:fundefn) : string =
       Auxl.errorm m "pp_fundefn"
 
 let pp_fundefnclass (m:pp_mode) (xd:syntaxdefn) lookup (fdc:fundefnclass) : string =
+  with_loc_source_context fdc.fdc_loc (fun () ->
   match m with
   | Ascii _ -> 
       Grammar_pp.pp_FUNDEFNCLASS ^"\n"
@@ -875,15 +978,21 @@ let pp_fundefnclass (m:pp_mode) (xd:syntaxdefn) lookup (fdc:fundefnclass) : stri
       ^ String.concat "\n\n" (List.map (pp_fundefn m xd lookup) fdc.fdc_fundefns)
 
   | Tex _ ->
-      "% fundefns "^fdc.fdc_name^"\n"
+      let fdc_name_surface = Grammar_pp.tex_surface_name xd.xd_imports fdc.fdc_name in
+      "% fundefns "^fdc_name_surface^"\n"
       ^ (String.concat 
            "\n"
            (List.map (pp_fundefn m xd lookup) fdc.fdc_fundefns))
       ^ "\n"
-      ^ "\\newcommand{"^Grammar_pp.tex_fundefnclass_name m fdc.fdc_name^"}{\n"
+      ^ "\\newcommand{"
+      ^ Grammar_pp.tex_fundefnclass_name m (Grammar_pp.tex_command_key xd.xd_imports fdc.fdc_name)
+      ^ "}{\n"
       ^ (String.concat 
            "\n" 
-           (List.map (function fd -> Grammar_pp.tex_fundefn_name m fd.fd_name^"{}") fdc.fdc_fundefns))
+           (List.map
+              (function fd ->
+                Grammar_pp.tex_fundefn_name m (Grammar_pp.tex_command_key xd.xd_imports fd.fd_name) ^ "{}")
+              fdc.fdc_fundefns))
       ^ "}\n\n"
  
   | Isa _ | Coq _ | Hol _ | Lem _ | Caml _ ->
@@ -908,6 +1017,7 @@ let pp_fundefnclass (m:pp_mode) (xd:syntaxdefn) lookup (fdc:fundefnclass) : stri
 
   | Twf _ -> Auxl.warning (Some fdc.fdc_loc) "internal: fundefnclass not implemented for Twelf"; ""
   | Lex _ | Menhir _ -> ""
+  )
 
 
 
@@ -973,8 +1083,15 @@ let pp_fun_or_reln_defnclass_list
           List.iter (fun frdc -> pp_fun_or_reln_defnclass fd m xd lookup frdc) frdcs;
           Printf.fprintf fd "\\newcommand{%s}{\n" (Grammar_pp.pp_tex_DEFNSS_NAME m);
           List.iter (function
-                       | FDC fdc -> Printf.fprintf fd "%s\n" (Grammar_pp.tex_fundefnclass_name m fdc.fdc_name)
-                       | RDC dc -> Printf.fprintf fd "%s\n" (Grammar_pp.tex_defnclass_name m dc.dc_name)) frdcs;
+                       | FDC fdc ->
+                           Printf.fprintf fd "%s\n"
+                             (Grammar_pp.tex_fundefnclass_name m
+                                (Grammar_pp.tex_command_key xd.xd_imports fdc.fdc_name))
+                       | RDC dc ->
+                           Printf.fprintf fd "%s\n"
+                             (Grammar_pp.tex_defnclass_name m
+                                (Grammar_pp.tex_command_key xd.xd_imports dc.dc_name)))
+            frdcs;
           output_string fd "}\n\n"
       | Lex _ | Menhir _ -> () 
 
@@ -1069,7 +1186,9 @@ let process_semiraw_rule (m: pp_mode) (xd: syntaxdefn) (lookup: made_parser)
           let (s,hn) = rule_name_parse s in
           let re = Str.regexp " *{{ *\\(.*\\)}} *" in
           if not(Str.string_match re s 0) then 
-            (hn,Term_parser.just_one_parse xd lookup rn_formula false l s )
+            let st = Term_parser.just_one_parse xd lookup rn_formula false l s in
+            check_formula_scope xd l st;
+            (hn, st)
           else 
             let s' = Str.matched_group 1 s in
 
@@ -1102,7 +1221,8 @@ let process_semiraw_rule (m: pp_mode) (xd: syntaxdefn) (lookup: made_parser)
                                 st_es = List.map (function st -> Ste_st(l,st)) sts;
                                 st_loc = l}) in
             (* print_string ("CONSTRUCTED "^Grammar_pp.pp_plain_symterm st^"\n"); *)
-            (hn,st) in
+            check_formula_scope xd l st;
+            (hn, st) in
 
 
 
@@ -1110,7 +1230,10 @@ let process_semiraw_rule (m: pp_mode) (xd: syntaxdefn) (lookup: made_parser)
         let conclusion =
           match lss2 with
           | [] -> raise (Rule_parse_error (l, "rule with no conclusion"))
-          | [(l,s)] -> Term_parser.just_one_parse ~transform:(Term_parser.defn_transform prod_name) xd lookup rn_formula false l s
+          | [(l,s)] ->
+              let st = Term_parser.just_one_parse ~transform:(Term_parser.defn_transform prod_name) xd lookup rn_formula false l s in
+              check_formula_scope xd l st;
+              st
           | _ -> raise (Rule_parse_error (l, "rule with multiple conclusions"))
         in
         let c = Term_parser.cd_env_of_syntaxdefn xd in
@@ -1126,16 +1249,19 @@ let process_semiraw_rule (m: pp_mode) (xd: syntaxdefn) (lookup: made_parser)
         Some (PSR_Rule dr)
 
 	  (* hacky test harness code for now*)
-    | Lineless_rule (l0,lss) -> 
-        (match lss with
-        | [] -> None
-        | _ -> let dr = {drule_name = "fake" ^ fakesucc ();
-                         drule_categories = StringSet.singleton "F";
-                         drule_premises = [];
-                         drule_conclusion = (Term_parser.just_one_parse xd lookup rn_formula false) l0 (String.concat " " (List.map snd lss));
-                         drule_homs = [];  
-                         drule_loc = l0} in
-          Some(PSR_Rule dr))
+	    | Lineless_rule (l0,lss) -> 
+	        (match lss with
+	        | [] -> None
+	        | _ -> let dr = {drule_name = "fake" ^ fakesucc ();
+		                         drule_categories = StringSet.singleton "F";
+		                         drule_premises = [];
+		                         drule_conclusion =
+	                                   (let st = (Term_parser.just_one_parse xd lookup rn_formula false) l0 (String.concat " " (List.map snd lss)) in
+	                                    check_formula_scope xd l0 st;
+	                                    st);
+		                         drule_homs = [];  
+		                         drule_loc = l0} in
+		          Some(PSR_Rule dr))
     | Defncom (l0,es) ->
         Some(PSR_Defncom es)
 
@@ -1160,7 +1286,7 @@ let process_raw_defn : pp_mode -> syntaxdefn -> made_parser -> string -> string 
           (process_semiraw_rule m xd lookup defnclass_wrapper rd.raw_d_wrapper prod_name) 
           rd.raw_d_body;
         d_homs =  List.map (Grammar_typecheck.cd_hom Hu_defn c es) rd.raw_d_homs;
-        d_loc = dummy_loc} 
+        d_loc = rd.raw_d_loc} 
 
 let process_raw_defnclass : pp_mode -> syntaxdefn -> made_parser -> raw_defnclass -> defnclass
     = fun m xd lookup rdc -> 
@@ -1171,7 +1297,7 @@ let process_raw_defnclass : pp_mode -> syntaxdefn -> made_parser -> raw_defnclas
        dc_wrapper = rdc.raw_dc_wrapper;
        dc_defns = List.map 
          (process_raw_defn m xd lookup rdc.raw_dc_name rdc.raw_dc_wrapper) rdc.raw_dc_defns;
-       dc_loc = dummy_loc} 
+       dc_loc = rdc.raw_dc_loc} 
 
 (* ******************** *)
 
@@ -1239,7 +1365,7 @@ let process_raw_fundefn : pp_mode -> syntaxdefn -> made_parser -> string -> raw_
           (process_raw_funclause m xd lookup fundefnclass_name rfd.raw_fd_pn_wrapper rfd.raw_fd_name fd_result_type) 
           rfd.raw_fd_clauses;
         fd_homs =  List.map (Grammar_typecheck.cd_hom Hu_fundefn c es) rfd.raw_fd_homs;
-        fd_loc = dummy_loc} 
+        fd_loc = rfd.raw_fd_loc} 
 
 let process_raw_fundefnclass : pp_mode -> syntaxdefn -> made_parser -> raw_fundefnclass -> fundefnclass
     = fun m xd lookup rfdc -> 
@@ -1248,7 +1374,7 @@ let process_raw_fundefnclass : pp_mode -> syntaxdefn -> made_parser -> raw_funde
         fdc_homs =  List.map (Grammar_typecheck.cd_hom Hu_fundefnclass c []) rfdc.raw_fdc_homs;
 	fdc_fundefns = List.map 
           (process_raw_fundefn m xd lookup rfdc.raw_fdc_name) rfdc.raw_fdc_fundefns;
-	fdc_loc = dummy_loc} 
+	fdc_loc = rfdc.raw_fdc_loc} 
 
 (* **************** *)        
 
@@ -1361,7 +1487,3 @@ let pp_counts sd =
   ^string_of_int good'^" good    "
   ^string_of_int bad'^" bad\n")
                          
-
-
-
-

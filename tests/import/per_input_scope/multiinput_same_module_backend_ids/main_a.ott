@@ -1,0 +1,7 @@
+import lib :: 'lib.ott' ::=
+{{ rocq LibA }}
+  | tm
+
+grammar
+a_tm :: 'ATm_' ::=
+  | tm :: :: imported_a

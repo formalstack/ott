@@ -1,0 +1,4 @@
+import dep :: 'dep.ott' ::=
+{{ ocaml Dep_ast }}
+{{ menhir Dep_ast }}
+  | ident

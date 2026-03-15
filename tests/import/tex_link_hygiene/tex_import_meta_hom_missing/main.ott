@@ -1,0 +1,6 @@
+import dep :: 'dep.ott' ::=
+  | t
+
+grammar
+main :: 'main_' ::=
+  | t  :: :: use_t

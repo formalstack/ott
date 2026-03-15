@@ -1,0 +1,14 @@
+*_ast.ml
+*_lexer.ml
+*_lexer.mll
+*_lib.mly
+*_parse.mly
+*_parser.ml
+*_parser.mli
+*_parser.mly
+*_parser_pp.ml
+check
+libgen/
+ocaml_modules/Main.ml
+menhir/**/lib_alias.ott
+menhir/declaration_policy/tokens.ml

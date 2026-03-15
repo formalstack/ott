@@ -1,0 +1,3 @@
+import libb :: 'libb.ott' ::=
+{{ rocq LibB }}
+  | b_nt

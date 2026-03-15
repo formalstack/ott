@@ -1,0 +1,11 @@
+import base :: 'dep.ott' ::=
+  | G
+
+defns
+LibB :: '' ::=
+
+defn
+use_b G :: :: use_b :: use_b_ by
+
+----- :: use_b_ok
+use_b G

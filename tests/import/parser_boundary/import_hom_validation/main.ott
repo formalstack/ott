@@ -1,0 +1,4 @@
+import dep :: 'dep.ott' ::=
+{{ rocq Dep }}
+{{ coq Other }}
+  | ty

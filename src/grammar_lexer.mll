@@ -62,19 +62,26 @@ type lexer = Lexing.lexbuf -> Grammar_parser.token
 
 type token_type = Tok_kw of string | Tok_sym of string*string | Tok_sym_direct of string*string | Tok_user of string 
 
-let hom_strings = ["TEX_NAME_PREFIX";"formula";"terminals";"M";"S";"tex";"com";"coq";"rocq";"hol";"lem";"isa";"ocaml";"icho";"ichlo";"ich";"ichl";"ir";"rh";"irh";"irho";"irhl";"irhlo";"coq-equality";"rocq-equality";"isasyn";"isaprec";"lex";"texvar";"isavar";"holvar";"lemvar";"ocamlvar";"repr-locally-nameless";"phantom";"coq-struct";"rocq-struct";"isa-proof";"isa-auxfn-proof";"isa-subrule-proof";"coq-lib";"rocq-lib";"coq-universe";"rocq-universe";"coq-notation";"rocq-notation"]
+type import_header_state =
+  | Import_header_none
+  | Import_header_after_keyword
+  | Import_header_after_module
+
+let hom_strings = ["TEX_NAME_PREFIX";"formula";"terminals";"M";"S";"tex";"com";"coq";"rocq";"coq-from";"rocq-from";"hol";"lem";"isa";"ocaml";"icho";"ichlo";"ich";"ichl";"ir";"rh";"irh";"irho";"irhl";"irhlo";"coq-equality";"rocq-equality";"isasyn";"isaprec";"lex";"texvar";"isavar";"holvar";"lemvar";"ocamlvar";"repr-locally-nameless";"phantom";"coq-struct";"rocq-struct";"isa-proof";"isa-auxfn-proof";"isa-subrule-proof";"coq-lib";"rocq-lib";"coq-universe";"rocq-universe";"coq-notation";"rocq-notation"]
 
 
 let de_lex t = match t with
 | EOF                  -> failwith "unexpected EOF in de_lex"
 | INTERSTITIAL(s)      -> Tok_user s
 | STRING (s1,s2)       -> Tok_sym_direct (s2, if List.mem s2 hom_strings then "\\mykw{"^s2^"}" else Auxl.pp_tex_escape_alltt s2)
+| PATH (_s1,s2)        -> Tok_sym_direct (s2, Auxl.pp_tex_escape_alltt s2)
 | COMMENTLINE s        -> Tok_user s
 | BLANKLINE s          -> Tok_user s
 | LINELINE(s1,s2,s3)   -> Tok_sym_direct (s1^s2^s3, "\\mysym{"^s1^"}"^Auxl.pp_tex_escape_alltt (s2^s3))
 | LINE (s1,s2)         -> Tok_user (s1^s2)
 | BLANKS s             -> Tok_user s
-| EMBED                -> Tok_kw "embed"                        
+| IMPORT               -> Tok_kw "import"
+| EMBED                -> Tok_kw "embed"
 | HOMS                 -> Tok_kw "homs"                         
 | METAVAR              -> Tok_kw "metavar"                      
 | INDEXVAR             -> Tok_kw "indexvar"                     
@@ -148,11 +155,13 @@ let de_lex_tex t = match de_lex t with
 
 exception No_Lexer_Here
 let my_lexer_state = ref ((function _ -> raise No_Lexer_Here) : lexer)
+let import_header_state = ref Import_header_none
 
 let my_lexer : bool -> lexer -> lexer =
   fun strip_interstitials -> 
     fun initial_lexer -> 
       my_lexer_state := initial_lexer;
+      import_header_state := Import_header_none;
       fun lexbuf ->
         let next_token () =
           !my_lexer_state lexbuf in
@@ -212,6 +221,7 @@ let non_newline_whitespace = (' ' | '\t' |'\012')
 (* let pre_ident = (['A'-'Z'] | ['a'-'z'] | ['0'-'9'] | "_" | "'")(['A'-'Z'] | ['a'-'z'] | ['0'-'9'] | "_" | "-" | "'")* *)
 let pre_ident = (['A'-'Z'] | ['a'-'z'] | ['0'-'9'] | "_" | "'")(['A'-'Z'] | ['a'-'z'] | ['0'-'9'] | "_" | "'")*
 let maybe_quoted_ident = pre_ident | ("'" pre_ident "'" ) | "''"
+let import_path_sq = "'" [^ '\'' '\010' '\013' ' ' '\t' '\012']+ "'"
 (*
 let pre_ident_allow_minus = (['A'-'Z'] | ['a'-'z'] | ['0'-'9'] | "_" | "'")(['A'-'Z'] | ['a'-'z'] | ['0'-'9'] | "_" | "-" | "'")*
 let maybe_quoted_ident_allow_minus = pre_ident_allow_minus | ("'" pre_ident_allow_minus "'" ) | "''"
@@ -240,17 +250,26 @@ rule metalang = parse
   | ">>"                           { comments metalang [ lexbuf.Lexing.lex_curr_p ] lexbuf }
   | ("%"[^'\010' '\013']* newline) as lxm    { incr_linenum lexbuf; INTERSTITIAL(lxm) }  
   | ","                            { COMMA }
-  | "::="                          { CCE                  }
-  | "|"                            { my_lexer_state := elements; BAR }
+  | "::="                          { import_header_state := Import_header_none; CCE }
+  | "|"                            { if !Global_option.in_import_items then BAR
+                                     else (my_lexer_state := elements; BAR) }
   | "{{"                           { my_lexer_state := hom metalang; DOUBLELEFTBRACE      }
   | "}}"                           { DOUBLERIGHTBRACE     }
-  | "::"                           { COLONCOLON           }
+  | "::"                           {
+                                     (match !import_header_state with
+                                      | Import_header_after_module ->
+                                        import_header_state := Import_header_none;
+                                        my_lexer_state := import_path metalang
+                                      | _ -> ());
+                                     COLONCOLON
+                                   }
   | "<::"                          { LTCOLONCOLON         }
   | "_::"                          { UNDERSCORECOLONCOLON }
   | "embed"                        { EMBED                }
   | "homs"                         { HOMS                 }
   | "metavar"                      { METAVAR              }
   | "indexvar"                     { INDEXVAR             }
+  | "import"                       { import_header_state := Import_header_after_keyword; IMPORT }
   | "grammar"                      { RULES                }
   | "subrules"                     { SUBRULES             }
   | "contextrules"                 { CONTEXTRULES         }
@@ -277,8 +296,22 @@ rule metalang = parse
   | "(+"                           { my_lexer_state := bindspec; BIND_LEFT_DELIM }
   | "{{*"                          { my_lexer_state := hom_star metalang; DOUBLELEFTBRACE      }
   | "*}}"                          { DOUBLERIGHTBRACE     }
-  | maybe_quoted_ident as lxm      { STRING(dequote(lxm),lxm) } 
+  | maybe_quoted_ident as lxm      {
+                                     (match !import_header_state with
+                                      | Import_header_after_keyword ->
+                                        import_header_state := Import_header_after_module
+                                      | _ -> ());
+                                     STRING(dequote(lxm),lxm)
+                                   }
   | eof                            { EOF                  }
+
+and import_path returnstate = parse
+    non_newline_whitespace+ as lxm { INTERSTITIAL(lxm) }
+  | newline as lxm                 { incr_linenum lexbuf; INTERSTITIAL(lxm) }
+  | ("%"[^'\010' '\013']* newline) as lxm
+                                   { incr_linenum lexbuf; INTERSTITIAL(lxm) }
+  | import_path_sq as lxm          { my_lexer_state := returnstate; PATH(dequote(lxm), lxm) }
+  | eof                            { EOF }
 
 (* lexing for the elements of a production. *)
 (* - tokens must be whitespace-separated, *)
@@ -506,7 +539,3 @@ and filter = parse
   | "["  as lxm       { STRING( "[", String.make 1 lxm )        }    
   | "]"  as lxm       { STRING( "]", String.make 1 lxm )        }
   | eof               { EOF                  }
-
-
-
-

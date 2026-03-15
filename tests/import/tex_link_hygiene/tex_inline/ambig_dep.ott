@@ -1,0 +1,22 @@
+grammar
+terminals :: 'terminals_' ::=
+  | |-wf    :: :: wf        {{ tex \\xvdash{wf} }}
+
+context, G {{ tex \\Gamma }} :: 'Ctx_' ::= {{ menhir-suppress }}
+  | 'x' :: :: x
+
+defns
+Wf :: '' ::=
+
+defn
+|-wf G :: :: G :: G_ by
+
+----- :: wf_ok
+|-wf G
+
+defn
+use :: :: use :: use_ by
+
+|-wf G
+----- :: use_ok
+use

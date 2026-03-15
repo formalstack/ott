@@ -95,6 +95,7 @@ let rocq_names_in_rules = ref true
 let rocq_use_filter_fn = ref false
 let merge_fragments = ref false
 let preserve_structure = ref None  (* None = smart default based on merge_fragments *)
+let import_search_paths = ref ([] : string list)
 let picky_multiple_parses = ref false
 let caml_include_terminals = ref false
 
@@ -149,6 +150,9 @@ let options = Arg.align [
     Arg.Tuple[Arg.String (fun s -> caml_filter_filename_srcs := s :: !caml_filter_filename_srcs);
               Arg.String (fun s -> caml_filter_filename_dsts := s :: !caml_filter_filename_dsts)],
     "<src><dst>  Files to OCaml filter" ); 
+  ( "-I",
+    Arg.String (fun s -> import_search_paths := !import_search_paths @ [s]),
+    "<dir>          Add directory to import search path" );
   ( "-merge",
     Arg.Bool (fun b -> merge_fragments := b),
     "<"^string_of_bool !merge_fragments ^">         merge grammar and definition rules" );
@@ -610,6 +614,21 @@ let process source_filenames =
 
   let document = List.map parse_file source_filenames in
 
+  (* Resolve imports (base dir is per source file) *)
+  let base_dirs =
+    List.map (fun (_, fn) -> Filename.dirname fn) source_filenames
+  in
+  (* Imported defn/fundefn bodies are implementations, not interfaces.
+     The TeX backend inlines bodies in a separate post-typecheck link step. *)
+  let keep_imported_defn_bodies = false in
+  let (document, import_ctx) =
+    Import.resolve_imports
+      ~base_dirs
+      ~search_paths:!import_search_paths
+      ~keep_imported_defn_bodies
+      document
+  in
+
   if !showraw then (
     let s = 
       (String.concat "\n" 
@@ -635,9 +654,13 @@ let process source_filenames =
 
   (* the quotiented un-auxed syntax, used to generate the pp functions, should be without the generated aux rules *)
 
-  let f quotient generate_aux skip_validation = 
-    try 
-      Grammar_typecheck.check_and_disambiguate m_tex quotient generate_aux targets_non_tex (List.map snd source_filenames) (!merge_fragments) skip_validation document 
+  (* Imported file paths go first so imported items sort before local items *)
+  let all_source_filenames =
+    (Import.imported_files ()) @ (List.map snd source_filenames) in
+
+  let f quotient generate_aux skip_validation =
+    try
+      Grammar_typecheck.check_and_disambiguate m_tex quotient generate_aux targets_non_tex all_source_filenames (!merge_fragments) skip_validation import_ctx document
     with
     | Typecheck_error (loc,s1,s2) ->
         Auxl.error (Some loc) ("(in checking and disambiguating "^(if quotient then "quotiented " else "") ^ "syntax)\n"^s1
@@ -791,7 +814,16 @@ let output_stage (sd,lookup,sd_unquotiented,sd_quotiented_unaux) =
 
       match t with
       | "tex" ->
-          System_pp.pp_systemdefn_core_tex m_tex sd lookup fi
+          let sd_tex =
+            Tex_inline.inline_imported_defn_bodies
+              ~m_tex
+              ~quotient_rules:!quotient_rules
+              ~generate_aux_rules:!generate_aux_rules
+              ~targets_non_tex:targets_non_tex
+              ~merge_fragments:!merge_fragments
+              sd
+          in
+          System_pp.pp_systemdefn_core_tex m_tex sd_tex lookup fi
       | "rocq" | "coq" ->
           let sd =
             ( match !rocq_avoid with

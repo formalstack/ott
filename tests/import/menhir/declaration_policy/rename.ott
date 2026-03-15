@@ -1,0 +1,12 @@
+import lib :: 'rename_provider.ott' ::=
+{{ ocaml Rename_provider_ast }}
+  | ident :: foo
+
+embed {{ menhir
+%left FOO
+}}
+
+grammar
+term, t :: 'Term_' ::= {{ menhir-start }}
+  | foo :: :: var
+  | term term' :: :: app {{ menhir-prec FOO }}

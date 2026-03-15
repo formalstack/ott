@@ -1,0 +1,17 @@
+import library :: 'lib.ott' ::=
+  | v :: q
+  | store
+
+indexvar index, i, n ::=
+  {{ lex numeral }}
+  {{ rocq nat }}
+
+defns
+Main :: '' ::=
+
+defn
+use :: :: Use :: Use_ by
+
+store <- q
+---------- :: ok
+use

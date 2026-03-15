@@ -1,0 +1,3 @@
+import liba :: 'liba.ott' ::=
+{{ rocq LibA }}
+  | a_nt

@@ -1,0 +1,9 @@
+**/_build/
+**/*.tex
+**/*_ast.ml
+**/*_lexer.mll
+**/*_parser.mly
+**/*_parse.mly
+**/*_parser_pp.ml
+**/main.byte
+**/main.native

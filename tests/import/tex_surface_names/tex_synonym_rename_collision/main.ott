@@ -1,0 +1,8 @@
+import dep :: 'dep.ott' ::=
+  | v :: atom
+  | store_ok
+
+grammar
+
+value, v0 :: 'MainVal_' ::= {{ menhir-suppress }}
+  | atom :: :: atom

@@ -1,0 +1,11 @@
+metavar ident, index, i ::= {{ lex alphanum }}
+
+defns
+Dep :: '' ::=
+
+defn
+store_ok i :: :: store_ok :: store_ok_ by
+
+store_ok x
+---------- :: ok
+store_ok i

@@ -1,0 +1,7 @@
+import common :: 'lib.ott' ::=
+{{ rocq Common }}
+  | tm
+
+grammar
+b_tm :: 'BTm_' ::=
+  | tm :: :: imported_b

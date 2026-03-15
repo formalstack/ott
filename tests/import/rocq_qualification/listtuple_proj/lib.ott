@@ -1,0 +1,21 @@
+indexvar index, i, n ::=
+  {{ lex numeral }}
+  {{ rocq nat }}
+
+grammar
+
+value, v :: 'Val_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+memory, M :: 'Mem_' ::= {{ menhir-suppress }}
+  | mem :: :: mem
+
+defns
+Mem :: '' ::=
+
+defn
+store M <- </ vi // i /> :: :: Store :: Store_ by
+
+---------- :: triv
+store M <- </ vi // i />
+

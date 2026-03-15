@@ -325,7 +325,66 @@ and syntaxdefn = (* xd *)  (* all the nt occurrences are fully resolved *)
       xd_embed_preamble : embed list;
       xd_embed : embed list;
       xd_isa_imports : string list;
-      xd_pas : parsing_annotations }
+      xd_pas : parsing_annotations;
+      xd_imports : import_context }
+
+and import_binding_kind =
+  | Import_syntax
+  | Import_defnclass
+  | Import_fundefnclass
+  | Import_defn
+  | Import_fundefn
+  | Import_subst
+  | Import_freevar
+
+and import_binding_visibility =
+  | Import_binding_explicit
+  | Import_binding_transitive_hidden
+  | Import_binding_internal
+
+and provider_info = {
+  pi_module : string;
+  pi_file : string;
+  pi_homs : (string * string) list;
+  pi_default_id : string;
+  pi_loc : loc;
+}
+
+and binding_info = {
+  bi_local_name : string;
+  bi_origin_name : string;
+  bi_provider : provider_info;
+  bi_visibility : import_binding_visibility;
+  bi_kinds : import_binding_kind list;
+}
+
+and import_root_link = {
+  irl_provider_root : string;
+  irl_provider_primary : string;
+  irl_local_root : string;
+  irl_local_primary : string;
+}
+
+and import_site_info = {
+  isi_provider : provider_info;
+  isi_bindings : binding_info list;
+  isi_root_links : import_root_link list;
+}
+
+and scope_info = {
+  si_user_scope_names : string list;
+  si_explicit_names : string list;
+  si_transitive_hidden_names : string list;
+  si_allowed_judgement_roots : string list;
+  si_direct_imports : import_site_info list;
+}
+
+and import_context = {
+  ic_direct_providers : provider_info list;
+  ic_imported_files : string list;
+  ic_binding_info_by_local_name : (string, binding_info) Hashtbl.t;
+  ic_scope_info_by_source_file : (string, scope_info) Hashtbl.t;
+}
 
 and defnclassname = string  (* dcn *)
 and defnname = string  (* dn *)
@@ -707,6 +766,34 @@ and raw_item = (* ri *)
   | Raw_item_hs of raw_hom_section 
   | Raw_item_coq_section of raw_coq_section
   | Raw_item_coq_variable of raw_coq_variable
+  | Raw_item_import of raw_import_directive
+
+and raw_import_item = {
+  rii_name : string;
+  rii_rename : string option;  (* None = direct, Some r = renamed *)
+  rii_loc : loc;
+}
+
+and raw_import_directive = {
+  rid_module : string;
+  rid_path : string;
+  rid_homs : raw_homomorphism list;  (* {{ rocq Lib }} etc. *)
+  rid_items : raw_import_item list;
+  rid_loc : loc;
+}
+   
+and raw_syntaxdefn = 
+    { raw_sd_mds : raw_metavardefn list; 
+      raw_sd_rs : raw_rule list;
+      raw_sd_dcs : raw_fun_or_reln_defnclass list;
+      raw_sd_srs : raw_subrule list;
+      raw_sd_crs : raw_contextrule list;
+      raw_sd_sbs : raw_subst list;
+      raw_sd_fvs : raw_freevar list;
+      raw_sd_embed : raw_embed list;
+      raw_sd_pas : raw_parsing_annotations list;
+      raw_sd_hss : raw_hom_section list;
+      raw_sd_loc : loc }         (* FZ shall we keep loc here? *)
       
 and raw_line = 
   | Raw_line of loc * string
@@ -767,10 +854,29 @@ type raw_drule_line_annot =
       dla_categories : raw_ident list;
       dla_homs : raw_homomorphism list}
 
+let empty_raw_sd =
+  { raw_sd_mds = []; raw_sd_rs = []; raw_sd_dcs = [];
+    raw_sd_srs = []; raw_sd_crs = []; raw_sd_sbs = []; raw_sd_fvs = [];
+    raw_sd_embed = []; raw_sd_hss = [];
+    raw_sd_pas = [];
+    raw_sd_loc = dummy_loc }
 
+let empty_import_context = {
+  ic_direct_providers = [];
+  ic_imported_files = [];
+  ic_binding_info_by_local_name = Hashtbl.create 0;
+  ic_scope_info_by_source_file = Hashtbl.create 0;
+}
 
-        
-   
+let lookup_import_binding (ic : import_context) (name : string)
+  : binding_info option =
+  Hashtbl.find_opt ic.ic_binding_info_by_local_name name
+
+let add_import_binding_if_absent (ic : import_context) (binding : binding_info)
+  : unit =
+  if not (Hashtbl.mem ic.ic_binding_info_by_local_name binding.bi_local_name) then
+    Hashtbl.replace ic.ic_binding_info_by_local_name binding.bi_local_name binding
+
 (* raw representation of tex input files *)
 
 type raw_unfiltered =

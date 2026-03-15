@@ -1,0 +1,14 @@
+import judg_a :: 'judg_a.ott' ::=
+{{ rocq Judg_a }}
+  | container
+  | Jfoo
+
+defns
+Jmain :: '' ::=
+
+defn
+container main :: :: main_ok :: main_ok_ by
+
+container ok
+---------- :: uses_wrap
+container main

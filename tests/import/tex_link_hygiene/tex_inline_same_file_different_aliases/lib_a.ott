@@ -1,0 +1,11 @@
+import common :: 'dep.ott' ::=
+  | G
+
+defns
+LibA :: '' ::=
+
+defn
+use_a G :: :: use_a :: use_a_ by
+
+----- :: use_a_ok
+use_a G

@@ -228,7 +228,7 @@ let add_raw_item fragments = function
   | Raw_item_embed raw_embeds -> { fragments with embeds = List.rev_append raw_embeds fragments.embeds }
   | Raw_item_pas raw_pas -> { fragments with pas = List.rev_append raw_pas fragments.pas }
   | Raw_item_hs raw_hs -> { fragments with hss = raw_hs :: fragments.hss }
-  | Raw_item_coq_section _ | Raw_item_coq_variable _ -> fragments
+  | Raw_item_coq_section _ | Raw_item_coq_variable _ | Raw_item_import _ -> fragments
 
 let finish_raw_fragments fragments =
   { mds = List.rev fragments.mds;
@@ -434,7 +434,7 @@ let allowable_hom_data =
                     "nonterminal, metavar or indexvar root"));
     ( Hu_metavar , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"rocq-equality";"coq-notation";"rocq-notation";"coq-universe";"rocq-universe";"lex";"texvar";"isavar";"holvar";"lemvar";"ocamlvar";"repr-locally-nameless";(*"repr-nominal";*)"phantom";"ocamllex";"ocamllex-remove";"ocamllex-of-string";"pp";"pp-raw";"pp-suppress"],
                     "metavar declaration"));
-    ( Hu_rule    , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"rocq-equality";"coq-notation";"rocq-notation";"coq-universe";"rocq-universe";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"ir";"rh";"irh";"irho";"irhl";"irhlo";"phantom";"aux";"auxparam";"menhir-suppress";"menhir-start";"menhir-start-type";"quotient-with";"pp";"pp-raw";"pp-suppress";"pp-params";"lex-comment"],
+    ( Hu_rule    , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"ocaml";"com";"coq-equality";"rocq-equality";"coq-notation";"rocq-notation";"coq-universe";"rocq-universe";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"ir";"rh";"irh";"irho";"irhl";"irhlo";"phantom";"aux";"auxparam";"menhir-suppress";"menhir-start";"menhir-start-type";"menhir-public";"quotient-with";"pp";"pp-raw";"pp-suppress";"pp-params";"lex-comment"],
                     "rule"));
     ( Hu_rule_meta, (["com"], "special rule"));
     ( Hu_prod    , (["isa";"coq";"rocq";"hol";"lem";(*"twf";*)"tex";"texlong";"ocaml";"com";"order";"isasyn";"isaprec";(*"icht";*)"icho";"ichlo";"ich";"ichl";"ic";"ch";"ih";"ir";"rh";"irh";"irho";"irhl";"irhlo";
@@ -1395,28 +1395,33 @@ let check_structure (xd:syntaxdefn) (str:structure) : unit =
     | [] -> 
 	()
     | (fn,(Struct_rs rg))::stres ->
-	(* for all r in rg, verify that all its deps are in rg or in seen *)
-	let rec int_check_rg rgseen rgtosee =
-	  ( match rgtosee with
-	  | [] -> ()
-	  | r::rs -> 
-	      if not ((Auxl.rule_of_ntr xd r).rule_semi_meta)
-	      then begin
-		let r_deps = 
-		  (List.assoc (Ntr r) dep_graph) in
-		List.iter
-		  (fun rd ->
-		    match rd with 
-		    | Mvr _ -> ()
-		    | Ntr rd -> 
-			if not (List.mem rd (rgtosee@rgseen)) 
-			then ty_error2 (Auxl.loc_of_ntr xd r) ("rule \""^r^"\" depends on rule \"" ^rd
-				       ^"\" which belongs to a future group of rules.\n") "")
-		  r_deps; 
-	      end;
-	      int_check_rg (r::rgseen) rs)
-	in 
-	int_check_rg seen rg;
+	(* Skip ordering check for imported rules — they were already
+	   validated in their source module. This allows transitive deps
+	   that were deduped against local defs to resolve correctly. *)
+	if not (Import.is_imported_file xd.xd_imports fn) then begin
+	  (* for all r in rg, verify that all its deps are in rg or in seen *)
+	  let rec int_check_rg rgseen rgtosee =
+	    ( match rgtosee with
+	    | [] -> ()
+	    | r::rs ->
+		if not ((Auxl.rule_of_ntr xd r).rule_semi_meta)
+		then begin
+		  let r_deps =
+		    (List.assoc (Ntr r) dep_graph) in
+		  List.iter
+		    (fun rd ->
+		      match rd with
+		      | Mvr _ -> ()
+		      | Ntr rd ->
+			  if not (List.mem rd (rgtosee@rgseen))
+			  then ty_error2 (Auxl.loc_of_ntr xd r) ("rule \""^r^"\" depends on rule \"" ^rd
+					 ^"\" which belongs to a future group of rules.\n") "")
+		    r_deps;
+		end;
+		int_check_rg (r::rgseen) rs)
+	  in
+	  int_check_rg seen rg
+	end;
 	check_rs (rg@seen) stres dep_graph
     | stre::stres -> 
 	check_rs seen stres dep_graph
@@ -1441,7 +1446,7 @@ let check_structure (xd:syntaxdefn) (str:structure) : unit =
 
 (** This constructs an internal representation of a grammar from a raw
     representation, typechecking the grammar on the way *)
-let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:bool) (targets:string list) (source_filenames:string list) (merge_fragments:bool) (skip_subrule_validation:bool) (ris_per_file:raw_item list list)
+let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:bool) (targets:string list) (source_filenames:string list) (merge_fragments:bool) (skip_subrule_validation:bool) (import_ctx:import_context) (ris_per_file:raw_item list list)
     : syntaxdefn * structure * raw_fun_or_reln_defnclass list =
 
   (* now we have in our hand the new ris_per_file that preserves the
@@ -1486,7 +1491,8 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
 
   (* 1- collect together the metavariable, grammar and definition items *)
 
-  let fragments = fold_raw_items (List.concat ris_per_file) in
+  let items = Raw_hom_sections.apply_to_items (List.concat ris_per_file) in
+  let fragments = fold_raw_items items in
 
   let fragments =
     if merge_fragments then merge_fragment_contents fragments else fragments
@@ -1737,106 +1743,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   debug ( "\nSynthesised raw language:\n"
 	  ^  pp_raw_fragments fragments ^"\n\n" );
 
-  (* 3d- append the homs from any extra hom sections onto the relevant *)
-  (* productions and definitions *)
-
-  let (collected_extra_homs : raw_extra_homs list) =
-    List.flatten 
-      (List.map
-         (function rhs -> 
-           List.map (function rhsi-> 
-             (rhs.raw_hs_wrapper^rhsi.raw_hsi_name,
-              (rhsi.raw_hsi_bs,rhsi.raw_hsi_homs))) 
-             rhs.raw_hs_hsis)
-         fragments.hss) in
-
-  let rec fst_map f (xs,y) = (* (f:'a * 'b -> 'a * 'b) ((xs,y):'a list * 'b) : 'a list * 'b = *)
-    match xs with 
-    | [] -> [],y
-    | x::xs1 -> 
-        let (x',y')= f (x,y) in
-        let (xs1'',y'') = fst_map f (xs1,y') in
-        (x'::xs1'',y'') in
-
-  let append_homs_prod : string -> raw_prod * raw_extra_homs list -> raw_prod * raw_extra_homs list =
-    function pn_wrapper -> function (rp,rehs) -> 
-      let (rehs1,rehs2)= 
-        List.partition (function (s,_) -> s = pn_wrapper^rp.raw_prod_name) rehs in
-      let homs_for_this_prod = 
-        List.flatten (List.map (function (s,(rbs,rhs))->rhs) rehs1) in
-      let bs_for_this_prod = 
-        List.flatten (List.map (function (s,(rbs,rhs))->rbs) rehs1) in
-      { rp with 
-        raw_prod_homs = rp.raw_prod_homs @ homs_for_this_prod;
-        raw_prod_bs = rp.raw_prod_bs @ bs_for_this_prod;
-      }, rehs2 in
-  
-  let append_homs_rule : raw_rule * raw_extra_homs list -> raw_rule * raw_extra_homs list =
-    function (rr,rehs) ->
-      let (rps',rehs') = 
-        fst_map (append_homs_prod rr.raw_rule_pn_wrapper) (rr.raw_rule_ps,rehs) in
-      { rr with raw_rule_ps = rps' }, rehs' in
-
-  let append_homs_rules : raw_rule list * raw_extra_homs list -> raw_rule list * raw_extra_homs list =
-    fst_map append_homs_rule in
-
-  let append_homs_defn : string -> raw_defn * raw_extra_homs list -> raw_defn * raw_extra_homs list =
-    function dc_wrapper -> function (rd,rehs) -> 
-      let (rehs1,rehs2)= 
-        List.partition (function (s,_) -> s = dc_wrapper^rd.raw_d_name) rehs in
-      let homs_for_this_defn = 
-        List.flatten (List.map (function (s,(rbs,rhs))->rhs) rehs1) in
-      let bs_for_this_defn = 
-        List.flatten (List.map (function (s,(rbs,rhs))->rbs) rehs1) in
-
-      if bs_for_this_defn <> [] then failwith ("cannot have a bindspec for a defn (in a hom section)"); (* TODO add location data to that error *)
-      { rd with 
-        raw_d_homs = rd.raw_d_homs @ homs_for_this_defn;
-      }, rehs2 in
-  
-  let append_homs_defnclass : raw_defnclass * raw_extra_homs list -> raw_fun_or_reln_defnclass * raw_extra_homs list =
-    function (rdc,rehs) ->
-      let (rds',rehs') = 
-        fst_map (append_homs_defn rdc.raw_dc_wrapper) (rdc.raw_dc_defns,rehs) in
-      Raw_RDC { rdc with raw_dc_defns = rds' }, rehs' in
-
-  let append_homs_fundefn : raw_fundefn * raw_extra_homs list -> raw_fundefn * raw_extra_homs list =
-    function (rfd,rehs) -> 
-      let (rehs1,rehs2)= 
-        List.partition (function (s,_) -> s = rfd.raw_fd_name) rehs in
-      let homs_for_this_fundefn = 
-        List.flatten (List.map (function (s,(rbs,rhs))->rhs) rehs1) in
-      let bs_for_this_fundefn = 
-        List.flatten (List.map (function (s,(rbs,rhs))->rbs) rehs1) in
-
-      if bs_for_this_fundefn <> [] then failwith ("cannot have a bindspec for a fundefn (in a hom section)"); (* TODO add location data to that error *)
-      { rfd with 
-        raw_fd_homs = rfd.raw_fd_homs @ homs_for_this_fundefn;
-      }, rehs2 in
-
-  let append_homs_fundefnclass : raw_fundefnclass * raw_extra_homs list -> raw_fun_or_reln_defnclass * raw_extra_homs list =
-    function (rfdc,rehs) ->
-      let (rfds',rehs') = 
-        fst_map (append_homs_fundefn) (rfdc.raw_fdc_fundefns,rehs) in
-      Raw_FDC { rfdc with raw_fdc_fundefns = rfds' }, rehs' in
-
-  let append_homs_fun_or_reln_defnclass : raw_fun_or_reln_defnclass * raw_extra_homs list -> raw_fun_or_reln_defnclass * raw_extra_homs list =
-    function (rfrdc,rehs) -> match rfrdc with
-    | Raw_FDC rfdc -> append_homs_fundefnclass (rfdc,rehs)
-    | Raw_RDC rdc -> append_homs_defnclass (rdc,rehs) in
-
-  let append_homs_fun_or_reln_defnclasss =
-    fst_map append_homs_fun_or_reln_defnclass in
-
-  let (raw_rs',rehs') = append_homs_rules (fragments.rs, collected_extra_homs) in
-
-  let (raw_dcs',rehs'') = append_homs_fun_or_reln_defnclasss (fragments.dcs, rehs') in
-
-  if rehs'' <> [] then failwith ("hom section contains items for nonexistent production or defn names: "^String.concat ", " (List.map fst rehs'')) (* TODO add location data to that error *);
-
-  let fragments =
-    { fragments with rs = raw_rs'; dcs = raw_dcs' }
-  in
+  (* Hom sections are desugared over raw items before fragment folding. *)
 
 
 
@@ -2070,6 +1977,7 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       xd_embed = cd_embeds c raw_embed_whole_file;
       xd_isa_imports = raw_isa_imports;
       xd_pas = cd_parsing_annotations all_prod_names fragments.pas;
+      xd_imports = import_ctx;
     } in
 
   (*  - pull the names of defined auxiliary functions, paired with the *)
@@ -2134,8 +2042,22 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   let mv_in_es (x:metavarroot*metavar*prod_env) (es:element list) : bool =
     MvSet.mem x (Auxl.mvs_set_used_in_es es) in
 
-  (* check all production names are distinct *)
-  let all_prod_names = List.flatten (List.map (function r -> (List.map (function p -> p.prod_name,p.prod_loc) r.rule_ps)) xd.xd_rs) in
+  (* check all production names are distinct
+
+     Imported modules are compiled separately; imported rules are present only
+     to support typechecking of the current file and must not be forced to
+     have globally unique constructor names with respect to local rules. *)
+  let local_rs =
+    List.filter
+      (fun r -> not (Import.is_imported_loc xd.xd_imports r.rule_loc))
+      xd.xd_rs
+  in
+  let all_prod_names =
+    List.flatten
+      (List.map
+         (fun r -> List.map (fun p -> (p.prod_name, p.prod_loc)) r.rule_ps)
+         local_rs)
+  in
   let rec find_first_duplicate2 pnls = 
     match pnls with
     | (pn,l)::pnls' -> 

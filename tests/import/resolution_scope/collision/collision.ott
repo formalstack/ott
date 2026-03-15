@@ -1,0 +1,23 @@
+import collision_lib :: 'collision_lib.ott' ::=
+{{ rocq Collision_lib }}
+  | container
+  | Jwrap
+
+grammar
+value :: 'MyVal_' ::=
+  | true  :: :: tt
+  | false :: :: ff
+
+expr :: 'Expr_' ::=
+  | value       :: :: val
+  | container   :: :: cont
+
+defns
+Jexpr :: '' ::=
+
+defn
+expr valid :: :: expr_valid :: expr_valid_ by
+
+container ok
+---------- :: val_ok
+expr valid

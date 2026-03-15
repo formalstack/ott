@@ -1,0 +1,8 @@
+metavar ident ::=
+  {{ ocaml string }}
+  {{ lex alphanum }}
+  {{ ocamllex ['a'-'z']+ }}
+
+grammar
+atom, a :: 'Atom_' ::= {{ menhir-public }}
+  | ident :: :: atom

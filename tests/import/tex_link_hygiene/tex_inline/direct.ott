@@ -1,0 +1,11 @@
+import dep :: 'dep.ott' ::=
+  | G
+
+defns
+Direct :: '' ::=
+
+defn
+show G :: :: show :: show_ by
+
+----- :: show_ok
+show G

@@ -1,0 +1,7 @@
+import lib :: 'public_provider.ott' ::=
+{{ ocaml Public_provider_ast }}
+  | term
+
+grammar
+wrapped :: 'Wrapped_' ::= {{ menhir-start }}
+  | term :: :: wrap

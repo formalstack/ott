@@ -1,0 +1,12 @@
+import ambig_dep :: 'ambig_dep.ott' ::=
+  | use
+
+defns
+Main :: '' ::=
+
+defn
+go :: :: go :: go_ by
+
+use
+----- :: ok
+go

@@ -1,0 +1,16 @@
+grammar
+context, G {{ tex \\Gamma }} :: 'ctx_' ::= {{ menhir-suppress }}
+  | unit :: :: ctxt
+
+terminals :: 'terminals_' ::=
+  | |-wf :: :: wf {{ tex \\xvdash{wf} }}
+
+defns well_formed :: Wf ::=
+
+  defn
+    |-wf G :: G :: G :: 'G'
+  by
+
+  ---------- :: ok
+  |-wf G
+

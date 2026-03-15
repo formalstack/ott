@@ -1,0 +1,2 @@
+import dep_transitive_bad :: 'dep_transitive_bad.ott' ::=
+  | expr

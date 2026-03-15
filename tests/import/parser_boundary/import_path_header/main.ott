@@ -1,0 +1,6 @@
+import lib :: 'deps/lib.ott' ::= {{ rocq Lib }}
+  | tm
+
+grammar
+expr :: 'Expr_' ::=
+  | tm :: :: imported_tm

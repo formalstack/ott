@@ -1,0 +1,11 @@
+import lib :: 'lib.ott' ::=
+{{ ocaml Lib_ast }}
+  | term
+  | ident
+
+grammar
+wrapped :: 'Wrapped_' ::= {{ menhir-suppress }}
+  | term :: :: wrap
+
+consumer :: 'Consumer_' ::= {{ menhir-start }}
+  | ident :: :: keep

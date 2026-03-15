@@ -12,7 +12,10 @@ grammar_parser.output
 grammar_parser.tex
 grammar_parser.mly-y2l
 version.tex
+version.ml
 *byte
+*.byte
+*.byt
 *opt
 bin/
 .depend
@@ -21,3 +24,21 @@ ocamlgraph-1.7
 make_merlin.sh
 ott.install
 regression/regression
+regression/*~
+regression/testRegr*
+regression/.testRegr*
+regression/._ott_coqrc.aux
+regression/_ott_coqrc.glob
+regression/a.out
+regression/.HOLMK
+
+# Ott module/import regression tests
+tests/import/**/*.out
+tests/import/**/*.tex
+tests/import/**/*.glob
+tests/import/**/*.v
+!tests/import/**/check*.v
+tests/import/**/*.vo
+tests/import/**/*.vos
+tests/import/**/*.vok
+tests/import/**/.*.aux

@@ -1,0 +1,3 @@
+import dep :: 'dep.ott' ::=
+  | terminals
+  | well_formed

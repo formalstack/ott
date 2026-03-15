@@ -1,0 +1,12 @@
+embed {{ menhir
+%left IDENT
+}}
+
+metavar ident ::=
+  {{ ocaml string }}
+  {{ lex alphanum }}
+  {{ ocamllex ['a'-'z']+ }}
+
+grammar
+term, t :: 'Term_' ::= {{ menhir-public }}
+  | ident :: :: var

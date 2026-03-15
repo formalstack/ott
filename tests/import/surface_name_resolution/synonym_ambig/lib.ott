@@ -1,0 +1,14 @@
+grammar
+
+ext, E :: 'ext_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+defns
+J :: '' ::=
+
+defn
+ok :: :: E :: E_ by
+
+---------- :: triv
+ok
+

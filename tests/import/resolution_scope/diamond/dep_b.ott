@@ -1,0 +1,8 @@
+import base :: 'base.ott' ::=
+{{ rocq Base }}
+  | ty
+
+grammar
+pty :: 'Pty_' ::=
+  | ty1 * ty2     :: :: pair
+  | ty             :: :: base_ty

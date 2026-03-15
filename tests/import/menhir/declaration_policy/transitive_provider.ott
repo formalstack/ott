@@ -1,0 +1,6 @@
+import tokens :: 'transitive_tokens.ott' ::=
+  | ident
+
+grammar
+term, t :: 'Term_' ::= {{ menhir-public }}
+  | ident :: :: var

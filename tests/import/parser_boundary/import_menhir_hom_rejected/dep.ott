@@ -1,0 +1,2 @@
+metavar ident, x ::=
+  {{ rocq nat }}

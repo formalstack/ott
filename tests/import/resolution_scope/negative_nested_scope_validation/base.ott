@@ -1,0 +1,6 @@
+grammar
+cast :: 'Cast_' ::=
+  | 'c' :: :: c
+
+tm :: 'Tm_' ::=
+  | cast :: :: cast_tm

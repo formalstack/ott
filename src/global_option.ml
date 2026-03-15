@@ -46,3 +46,6 @@ let caml_pp_ast_module = ref (None : string option)
 let caml_pp_json = ref false
 
 let quiet = ref false
+
+(* Used by lexer/parser to suppress elements-mode switching for BAR in import items *)
+let in_import_items = ref false

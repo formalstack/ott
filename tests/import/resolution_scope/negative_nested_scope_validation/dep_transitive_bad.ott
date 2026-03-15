@@ -1,0 +1,6 @@
+import base :: 'base.ott' ::=
+  | tm
+
+grammar
+expr :: 'Expr_' ::=
+  | cast :: :: bad_cast

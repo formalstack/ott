@@ -56,30 +56,36 @@ let rec pp_embeds_with write m xd lookup el =
   List.iter (pp_embedmorphism_with write m xd lookup) el
 
 and pp_embedmorphism_with write m xd lookup (l,hn,es) =
-  let pp_locs = if !Global_option.output_source_locations >=2 then Grammar_pp.pp_source_location m l else "" in
-  write pp_locs;
-  match (m,hn) with 
-  | (Ascii ao, _) -> 
-      write Grammar_pp.pp_DOUBLELEFTBRACE;
-      write " ";
-      write (Grammar_pp.pp_hom_name m xd hn);
-      write " ";
-      pp_embed_spec_with write m xd lookup es;
-      write " ";
-      write Grammar_pp.pp_DOUBLERIGHTBRACE;
-      write "\n";
-  | (Coq _, "coq") | (Coq _, "rocq") 
-  | (Isa _, "isa")                       
-  | (Hol _, "hol") 
-  | (Lem _, "lem") 
-  | (Twf _, "twf") 
-  | (Tex _, "tex") 
-  | (Caml _, "ocaml")
-  | (Menhir _, "menhir")
-  | (Lex _,  "lex") -> 
-      pp_embed_spec_with write m xd lookup es;
-      write "\n"
-  | (Coq _, _) | (Isa _, _) | (Hol _,_) | (Lem _,_) | (Twf _,_) | (Tex _,_) | (Caml _,_) | (Lex _, _) | (Menhir _, _) -> ()
+  let source_file =
+    match l with
+    | [] -> None
+    | _ -> Some (Import_naming.source_file_of_loc ~default:"" l)
+  in
+  Import.with_current_source_file source_file (fun () ->
+    let pp_locs = if !Global_option.output_source_locations >=2 then Grammar_pp.pp_source_location m l else "" in
+    write pp_locs;
+    match (m,hn) with 
+    | (Ascii ao, _) -> 
+        write Grammar_pp.pp_DOUBLELEFTBRACE;
+        write " ";
+        write (Grammar_pp.pp_hom_name m xd hn);
+        write " ";
+        pp_embed_spec_with write m xd lookup es;
+        write " ";
+        write Grammar_pp.pp_DOUBLERIGHTBRACE;
+        write "\n";
+    | (Coq _, "coq") | (Coq _, "rocq") 
+    | (Isa _, "isa")                       
+    | (Hol _, "hol") 
+    | (Lem _, "lem") 
+    | (Twf _, "twf") 
+    | (Tex _, "tex") 
+    | (Caml _, "ocaml")
+    | (Menhir _, "menhir")
+    | (Lex _,  "lex") -> 
+        pp_embed_spec_with write m xd lookup es;
+        write "\n"
+    | (Coq _, _) | (Isa _, _) | (Hol _,_) | (Lem _,_) | (Twf _,_) | (Tex _,_) | (Caml _,_) | (Lex _, _) | (Menhir _, _) -> ())
 
 and pp_embed_spec_with write m xd lookup es = 
   List.iter (pp_embed_spec_el_with write m xd lookup) es
@@ -93,9 +99,17 @@ and pp_embed_spec_el_with write m xd lookup ese =
           write Grammar_pp.pp_DOUBLELEFTBRACKET; 
           write s;
           write Grammar_pp.pp_DOUBLERIGHTBRACKET )
+  | Caml _ | Menhir _ ->
+      ( match ese with
+      | Embed_string (_l,s) ->
+          write s
+      | Embed_inner (l,s) ->
+          let st = Term_parser.just_one_parse xd lookup "user_syntax" false l s in
+          let ((de1,de2) as de,de3,pptbe) = Bounds.bound_extraction m xd l [st]  in
+          write (Grammar_pp.pp_symterm m xd [] de st))
   | Tex xo when (match ese with Embed_inner (_,"TEX_NAME_PREFIX")->true | _->false) -> 
       write xo.ppt_name_prefix
-  | Tex _ | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Caml _ | Lex _ | Menhir _ -> 
+  | Tex _ | Coq _ | Isa _ | Hol _ | Lem _ | Twf _ | Lex _ -> 
       ( match ese with
       | Embed_string (l,s) -> write s
 

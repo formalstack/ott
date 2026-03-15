@@ -1,0 +1,17 @@
+import lib :: 'lib.ott' ::=
+{{ ocaml Lib_ast }}
+  | term
+  | ident
+
+embed {{ menhir
+%right EOF
+}}
+
+grammar
+wrapped :: 'Wrapped_' ::=
+  | term :: :: wrap
+
+consumer :: 'Consumer_' ::= {{ menhir-start }} {{ menhir-start-type t }} {{ ocaml t }}
+  {{ pp-raw x = string "<consumer>" }}
+  {{ pp x = string "<consumer>" }}
+  | wrapped :: :: via_wrap {{ ocaml let term = 0 in let label = "term" in let x : Lib_ast.term = match [[wrapped]] with Wrapped_wrap u -> u in let _ = (term, label) in x }}

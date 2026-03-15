@@ -1,0 +1,5 @@
+grammar
+
+ext, E :: 'ext_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+

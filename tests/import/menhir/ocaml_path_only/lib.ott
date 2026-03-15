@@ -1,0 +1,7 @@
+metavar ident, x ::=
+  {{ ocaml string }}
+  {{ ocamllex ['a'-'z']+ }}
+
+grammar
+term, t :: 'Term_' ::= {{ menhir-public }}
+  | ident :: :: var

@@ -1,0 +1,8 @@
+import dep :: 'dep.ott' ::=
+{{ rocq Dep }}
+{{ rocq-from Foo.Bar }}
+  | ty
+
+grammar
+expr :: 'Expr_' ::=
+  | ty :: :: imported_ty

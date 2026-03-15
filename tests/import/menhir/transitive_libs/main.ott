@@ -1,0 +1,11 @@
+import left_mod :: 'left.ott' ::=
+{{ ocaml Left_ast }}
+  | left_term
+
+import right_mod :: 'right.ott' ::=
+{{ ocaml Right_ast }}
+  | right_term
+
+grammar
+pair :: 'Pair_' ::= {{ menhir-start }}
+  | left_term right_term :: :: pair

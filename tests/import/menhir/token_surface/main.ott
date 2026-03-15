@@ -1,0 +1,7 @@
+import lib :: 'lib.ott' ::=
+{{ ocaml Lib_ast }}
+  | term
+
+grammar
+wrapped :: 'Wrapped_' ::= {{ menhir-start }}
+  | term :: :: wrap

@@ -1,0 +1,22 @@
+metavar ident, x ::=
+  {{ ocaml string }}
+
+grammar
+
+expr, e :: 'DepExpr_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+place, p :: 'DepPlace_' ::= {{ menhir-suppress }}
+  | unit :: :: unit
+
+substitutions
+  multiple place ident :: sub_place_in
+
+defns
+Dep :: '' ::=
+
+defn
+store <- place :: :: store_ok :: store_ok_ by
+
+----------- :: ok
+store <- place

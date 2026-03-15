@@ -1,0 +1,7 @@
+grammar
+expr, e :: 'Expr_' ::=
+  | value :: :: imported_val
+
+import library :: 'nested/lib.ott' ::=
+{{ rocq Lib }}
+  | value

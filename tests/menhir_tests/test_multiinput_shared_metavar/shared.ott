@@ -1,0 +1,8 @@
+metavar ident, x ::=
+  {{ ocaml string }}
+  {{ ocamllex ['a'-'z']['a'-'z''A'-'Z''0'-'9''_']* }}
+
+grammar
+
+alpha, a :: 'alpha_' ::= {{ menhir-start }}
+  | x :: :: var
