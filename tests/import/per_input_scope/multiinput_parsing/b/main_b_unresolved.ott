@@ -1,0 +1,13 @@
+grammar
+
+expr, e :: 'Expr_' ::=
+  | imported :: :: imported
+  | box atom end :: :: boxLocal
+
+defns Main :: 'U' ::=
+
+defn
+use expr :: :: Use :: 'Use' by
+
+---------- :: choose
+use box unit end

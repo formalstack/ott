@@ -1,0 +1,23 @@
+grammar
+
+atom, a :: 'Atom_' ::=
+  | unit :: :: unit
+
+result, r :: 'Result_' ::=
+  | atom :: :: atom
+
+defns core :: 'J' ::=
+
+defn
+pack :: :: Pack :: 'Pack' by
+
+---------- :: base
+pack
+
+funs
+F ::=
+
+fun
+fold atom end :: result :: Fold by
+
+fold unit end === unit

@@ -1,0 +1,17 @@
+import ambig_a :: 'ambig_a.ott' ::=
+{{ tex \input{ambig_a} }}
+  | atom_a :: latom
+
+import ambig_b :: 'ambig_b.ott' ::=
+{{ tex \input{ambig_b} }}
+  | atom_b :: ratom
+
+grammar
+
+expr, e :: 'Expr_' ::=
+  | latom :: :: from_left
+  | ratom :: :: from_right
+  | expr seal :: :: seal
+
+parsing
+  Expr_seal <= Atom_box

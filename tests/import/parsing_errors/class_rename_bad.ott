@@ -1,0 +1,14 @@
+import alias_lib :: 'alias_lib.ott' ::=
+{{ tex \input{alias_lib} }}
+  | core :: imported_core
+
+defns Main :: 'U' ::=
+
+defn
+use :: :: Use :: 'Use' by
+
+---------- :: base
+use
+
+parsing
+  UUse <= Imported_corePack

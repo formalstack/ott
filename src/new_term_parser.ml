@@ -940,6 +940,8 @@ let build_grammar (xd : syntaxdefn)
             ("internal error: missing parser production for parsing annotation prodname \""
              ^ pn ^ "\"")
     in
+    (* grammar_typecheck has already canonicalized xd_pas to internal
+       prodnames, so parser construction can use them directly. *)
     List.iter
       (fun (pn1, annot, pn2, loc) ->
          let (i1, i1') = find_prodname_index2 pn1 loc in

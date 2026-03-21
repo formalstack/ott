@@ -88,6 +88,14 @@ struct
       [] -> None
     | (x::y) -> if f x then Some x else find f y;;
 
+  type 'a answer =
+      {answer_value : 'a;
+       answer_returned : int list;
+       answer_children : (reduce_slot * result answer) list;
+       answer_loop : NTset.t}
+  type complete_answer = result answer
+  type partial_answer = result list answer
+
   type rule_node = 
       {rule_nt : reduce_record;
        outgoing : term_or_sym_node list;
@@ -100,7 +108,7 @@ struct
        (* The following fields are for doing the depth-first traversal *)
        mutable started : bool;
        mutable finished : bool;
-       mutable answers : (result * int list * NTset.t) list;
+       mutable answers : complete_answer list;
        mutable debug : string}
   and term_or_sym_node = 
       TermNode of Terminal.t
@@ -525,27 +533,77 @@ struct
            with Not_found -> true)
         children;;
 
+  let greater_priority (higher : int) (lower : int) : bool =
+    try
+      let (g, _, _, _) = IntPairMap.find (higher, lower) priority in
+        g
+    with Not_found ->
+      false
+
+  let chain_preferred_to (left_chain : int list) (right_chain : int list) : bool =
+    List.exists
+      (fun higher ->
+         not (List.mem higher right_chain)
+         &&
+         List.exists
+           (fun lower ->
+              not (List.mem lower left_chain)
+              && greater_priority higher lower)
+           right_chain)
+      left_chain
+
+  let rec answer_preferred_to
+      (left : complete_answer) (right : complete_answer) : bool =
+    chain_preferred_to left.answer_returned right.answer_returned
+    ||
+    List.exists
+      (fun (left_slot, left_child) ->
+         List.exists
+           (fun (right_slot, right_child) ->
+              left_slot = right_slot
+              && answer_preferred_to left_child right_child)
+           right.answer_children)
+      left.answer_children
+
+  let filter_complete_answers
+      (answers : complete_answer list) : complete_answer list =
+    List.filter
+      (fun answer ->
+         not (List.exists
+                (fun other ->
+                   other != answer && answer_preferred_to other answer)
+                answers))
+      answers
+
   let process_parse_tree pt = 
 
-    let rec process_rule_node (rn : rule_node) : (result * int list * NTset.t) list =
+    let rec process_rule_node (rn : rule_node) : complete_answer list =
       let idx = rn.rule_nt.reduce_index in
         List.fold_right
-          (fun (rl,injection_children,loop) res -> 
-             if NTset.mem rn.rule_nt.reduce_left loop then
+          (fun partial_answer res -> 
+             if NTset.mem rn.rule_nt.reduce_left partial_answer.answer_loop then
                res
              else
                try
-                 (rn.rule_nt.reduce_action rl, 
-                  idx::injection_children,
-                  NTset.add rn.rule_nt.reduce_left loop)::res
+                 {answer_value =
+                    rn.rule_nt.reduce_action partial_answer.answer_value;
+                  answer_returned =
+                    idx :: partial_answer.answer_returned;
+                  answer_children =
+                    partial_answer.answer_children;
+                  answer_loop =
+                    NTset.add rn.rule_nt.reduce_left partial_answer.answer_loop}
+                 :: res
                with Reject_parse ->
                  res)
-          (process_t_or_s_nodes idx rn.outgoing rn.rule_nt.reduce_transparent)
+          (process_t_or_s_nodes idx rn.rule_nt.reduce_slots rn.outgoing
+             rn.rule_nt.reduce_transparent)
           []
 
     and process_t_or_s_nodes (conflict_idx : int)
+          (slots : reduce_slot option list)
           (nodes : term_or_sym_node list) (transp : bool)
-          : (result list * int list * NTset.t) list =
+          : partial_answer list =
       let eps_map = epsilon_map nodes in
       let (combine_f,combine_nt) =
         match get_inj nodes with
@@ -560,31 +618,49 @@ struct
                (fun i x y -> if i = n then x else y))
       in
       let combine_f = if not transp then combine_f else (fun _ x y -> x @ y) in
-      let rec process i =
-        function
-            [] -> [([], [],NTset.empty)]
-          | TermNode _ :: rest -> 
-              process (i + 1) rest
-          | SymNode sn :: rest ->
+      let rec process i slots nodes =
+        match slots, nodes with
+            [], [] ->
+              [{answer_value = [];
+                answer_returned = [];
+                answer_children = [];
+                answer_loop = NTset.empty}]
+          | slot :: rest_slots, TermNode _ :: rest_nodes -> 
+              process (i + 1) rest_slots rest_nodes
+          | slot :: rest_slots, SymNode sn :: rest_nodes ->
               let first_results = 
                 List.filter
-                  (fun (r, conflicts, _) ->
-                     check_conflicts eps_map conflict_idx i conflicts)
+                  (fun answer ->
+                     check_conflicts eps_map conflict_idx i
+                       answer.answer_returned)
                   (process_sym_node sn)
               in
-              let rest_results = process (i + 1) rest in
+              let rest_results = process (i + 1) rest_slots rest_nodes in
                 List.flatten
                   (List.map 
-                     (fun (f_res,f_idx,f_nts) -> 
+                     (fun first_answer -> 
                         List.map 
-                          (fun (r_res,r_idx,r_nts) -> 
-                             (f_res::r_res,
-                              combine_f i f_idx r_idx,
-                              combine_nt i f_nts r_nts))
+                          (fun rest_answer -> 
+                             {answer_value =
+                                first_answer.answer_value
+                                :: rest_answer.answer_value;
+                              answer_returned =
+                                combine_f i first_answer.answer_returned
+                                  rest_answer.answer_returned;
+                              answer_children =
+                                (match slot with
+                                     None -> rest_answer.answer_children
+                                   | Some key ->
+                                       (key, first_answer)
+                                       :: rest_answer.answer_children);
+                              answer_loop =
+                                combine_nt i first_answer.answer_loop
+                                  rest_answer.answer_loop})
                           rest_results)
                      first_results)
+          | _ -> assert false
       in
-        process 0 nodes
+        process 0 slots nodes
 
     and process_sym_node sn =
       if sn.finished then 
@@ -636,10 +712,11 @@ struct
 
     let all_sn = get_sym_nodes pt in
     (* print_parse_tree all_sn; *)
-    let (scc : symbol_node list array) = Scc.scc_array all_sn in
+      let (scc : symbol_node list array) = Scc.scc_array all_sn in
       for i = 0 to Array.length scc - 1 do
         process_component scc.(i)
       done;
-      List.map (fun (x,_,_) -> x) pt.answers
+      List.map (fun answer -> answer.answer_value)
+        (filter_complete_answers pt.answers)
 
 end

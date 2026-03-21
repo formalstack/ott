@@ -1,0 +1,33 @@
+grammar
+
+atom, a :: 'Atom_' ::=
+  | unit :: :: unit
+  | box atom end :: :: box
+
+place, p :: 'Place_' ::=
+  | unit :: :: unit
+
+result, r :: 'Result_' ::=
+  | atom :: :: atom
+
+defns core :: 'J' ::=
+
+defn
+ok :: :: Ok :: 'Ok' by
+
+---------- :: ok
+ok
+
+defn
+load place ==> atom :: :: Load :: 'Load' by
+
+---------- :: load
+load unit ==> unit
+
+funs
+F ::=
+
+fun
+fold atom end :: result :: Fold by
+
+fold unit end === unit

@@ -8,6 +8,8 @@ SUITES := \
   ocaml_modules \
   menhir \
   per_input_scope \
+  parsing \
+  parsing_errors \
   tex_surface_names \
   tex_link_hygiene
 

@@ -1,6 +1,6 @@
 include ../common.mk
 
-SCENARIOS := multiinput multiinput_same_module_backend_ids multiinput_same_file_different_aliases tex_multiinput_root_scope tex_multiinput_metavar_root_scope
+SCENARIOS := multiinput multiinput_parsing multiinput_same_module_backend_ids multiinput_same_file_different_aliases tex_multiinput_root_scope tex_multiinput_metavar_root_scope
 
 .PHONY: all clean $(SCENARIOS)
 

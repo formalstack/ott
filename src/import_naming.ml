@@ -49,38 +49,45 @@ let wrapper_prefix_for_module ~(module_name : string) : string =
 (* Inverse mapping for display                                          *)
 (* ------------------------------------------------------------------ *)
 
-let surface_of_internal_token (n : string) : string option =
-  let is_hex_char = function
-    | '0' .. '9' | 'a' .. 'f' -> true
-    | _ -> false
-  in
-  let has_hex8_at (s : string) (i : int) : bool =
-    let len = String.length s in
-    i >= 0 && i + 8 <= len
-    && (let ok = ref true in
-        for j = i to i + 7 do
-          if not (is_hex_char s.[j]) then ok := false
-        done;
-        !ok)
-  in
-  let strip_internal pref ~expects_underscore =
-    let lp = String.length pref and ln = String.length n in
-    if ln < lp + 8 then None
-    else if String.sub n 0 lp <> pref then None
-    else if not (has_hex8_at n lp) then None
+let is_hex_char = function
+  | '0' .. '9' | 'a' .. 'f' -> true
+  | _ -> false
+
+let has_hex8_at (s : string) (i : int) : bool =
+  let len = String.length s in
+  i >= 0 && i + 8 <= len
+  && (let ok = ref true in
+      for j = i to i + 7 do
+        if not (is_hex_char s.[j]) then ok := false
+      done;
+      !ok)
+
+let strip_internal_token ~(pref : string) ~(expects_underscore : bool)
+    (n : string) : string option =
+  let lp = String.length pref and ln = String.length n in
+  if ln < lp + 8 then None
+  else if String.sub n 0 lp <> pref then None
+  else if not (has_hex8_at n lp) then None
+  else
+    let j = lp + 8 in
+    if expects_underscore then
+      if ln >= j + 1 && n.[j] = '_' then
+        Some (String.sub n (j + 1) (ln - (j + 1)))
+      else None
     else
-      let j = lp + 8 in
-      if expects_underscore then
-        if ln >= j + 1 && n.[j] = '_' then
-          Some (String.sub n (j + 1) (ln - (j + 1)))
-        else None
-      else
-        Some (String.sub n j (ln - j))
+      Some (String.sub n j (ln - j))
+
+let strip_module_wrapper_prefix (n : string) : string option =
+  strip_internal_token ~pref:"__ott_mod_" ~expects_underscore:true n
+
+let surface_of_internal_token (n : string) : string option =
+  let strip_internal pref ~expects_underscore =
+    strip_internal_token ~pref ~expects_underscore n
   in
   match strip_internal "__ott_trans_" ~expects_underscore:true with
   | Some s -> Some s
   | None ->
-    (match strip_internal "__ott_mod_" ~expects_underscore:true with
+    (match strip_module_wrapper_prefix n with
      | Some s -> Some s
      | None ->
        strip_internal "otttransiv" ~expects_underscore:false)

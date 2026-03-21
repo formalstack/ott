@@ -255,12 +255,14 @@ sig
   module Tmap : Map.S with type key = Terminal.t
   type result
   type state = int
+  type reduce_slot
   type reduce_record = 
       {reduce_left : Nonterminal.t; 
        reduce_action : result list -> result;
        reduce_reject : bool;
        reduce_index : state;
        reduce_length : int;
+       reduce_slots : reduce_slot option list;
        reduce_transparent : bool;
        reduce_label : string}
   type action_entry = {shift : state option; 
@@ -286,12 +288,17 @@ struct
   module Terminal = Terminal
   type result = GramTypes.result
   type state = int
+  type reduce_slot_symbol =
+      Reduce_slot_nonterminal of int
+    | Reduce_slot_terminal of int
+  type reduce_slot = reduce_slot_symbol list
   type reduce_record = 
       {reduce_left : Nonterminal.t; 
        reduce_action : result list -> result;
        reduce_reject : bool;
        reduce_index : state;
        reduce_length : int;
+       reduce_slots : reduce_slot option list;
        reduce_transparent : bool;
        reduce_label : string}
   type action_entry = {shift : state option; 
@@ -558,6 +565,20 @@ struct
              res)
         scc_vertex_sets
         NTmap.empty;;
+
+  let slot_symbol_of_grammar_symbol (gs : grammar_symbol) : reduce_slot_symbol =
+    match gs with
+      NT nt -> Reduce_slot_nonterminal (NTmap.find nt nt_ordering)
+    | T t -> Reduce_slot_terminal (Terminal.to_int t)
+
+  let rec slot_keys_of_rhs (rhs : grammar_symbol list) : reduce_slot option list =
+    match rhs with
+      [] -> []
+    | T _ :: rest ->
+        None :: slot_keys_of_rhs rest
+    | NT _ :: rest ->
+        Some (List.map slot_symbol_of_grammar_symbol rest)
+        :: slot_keys_of_rhs rest
 
   (* For each nonterminal, which terminals cannot follow it *)
   let (single_follow_restrs : (Terminal.t -> bool) list NTmap.t) =
@@ -828,6 +849,7 @@ struct
                       reduce_reject = p.reject;
                       reduce_index = p.index;
                       reduce_length = List.length p.prod_right;
+                      reduce_slots = slot_keys_of_rhs p.prod_right;
                       reduce_transparent = p.transparent;
                       reduce_label = if debug then gram_syms_to_string p.prod_right else ""}
            in

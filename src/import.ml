@@ -1671,14 +1671,11 @@ let filter_items (included : StringSet.t) ~(explicit_seeds : StringSet.t)
             && StringSet.mem (resolve_to_primary synonym_map fv.raw_fv_that) included)
       ) raw_fvs in
       if filtered = [] then None else Some (Raw_item_fvs filtered)
-    | Raw_item_pas raw_pas ->
-      let filtered = List.filter (fun pa ->
-        List.for_all (fun (n1, _, n2) ->
-          StringSet.mem (resolve_to_primary synonym_map n1) included
-          && StringSet.mem (resolve_to_primary synonym_map n2) included
-        ) pa.raw_pa_data
-      ) raw_pas in
-      if filtered = [] then None else Some (Raw_item_pas filtered)
+    | Raw_item_pas _ ->
+      (* Parsing annotations name productions, not import-layer declarations.
+         Import resolution should preserve them verbatim and let the
+         typechecker decide later whether they apply in the assembled grammar. *)
+      Some ri
     | Raw_item_dcs (Raw_RDC rdc) ->
       let class_included = StringSet.mem rdc.raw_dc_name included in
       let class_explicit = StringSet.mem rdc.raw_dc_name explicit_seeds in

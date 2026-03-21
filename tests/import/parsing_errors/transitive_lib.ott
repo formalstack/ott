@@ -1,0 +1,8 @@
+import base :: 'base.ott' ::=
+{{ tex \input{base} }}
+  | atom
+
+grammar
+
+expr, e :: 'Expr_' ::=
+  | atom :: :: atom

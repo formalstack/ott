@@ -1,0 +1,5 @@
+grammar
+
+atom_a, aa :: 'Atom_' ::=
+  | unit :: :: unit
+  | box atom_a end :: :: box

@@ -1,0 +1,7 @@
+grammar
+
+atom, a :: 'Atom_' ::=
+  | unit :: :: unit
+
+imported, i :: 'Imported_' ::=
+  | box atom end :: :: box

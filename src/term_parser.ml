@@ -1214,6 +1214,7 @@ about multiple parses *)
 let just_one_parse ?(transform : symterm list -> symterm list = user_syntax_transform)
       (xd: syntaxdefn) (lookup: made_parser) 
       (ntr: nontermroot) (concrete: bool) (l: loc) (s: string): symterm =
+  (* Complete-parse precedence is decided in Glr.process_parse_tree. *)
   let Ascii oldopts = pp_ascii_opts_default in
   let opts = Ascii {oldopts with ppa_colour = !Auxl.colour} in
   let sts = parse_complete lookup ntr concrete s in

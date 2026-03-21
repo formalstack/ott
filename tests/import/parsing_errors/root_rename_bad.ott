@@ -1,0 +1,13 @@
+import alias_lib :: 'alias_lib.ott' ::=
+{{ tex \input{alias_lib} }}
+  | result :: imported_result
+  | Fold
+
+grammar
+
+expr, e :: 'Expr_' ::=
+  | imported_result :: :: result
+  | expr seal :: :: seal
+
+parsing
+  Expr_seal <= Imported_result_Fold

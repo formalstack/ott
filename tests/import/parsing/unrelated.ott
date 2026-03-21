@@ -1,0 +1,22 @@
+grammar
+
+a, aa :: 'A_' ::=
+  | y :: :: from_y
+
+b, bb :: 'B_' ::=
+  | x :: :: from_x
+
+s, ss :: 'S_' ::=
+  | x a :: :: via_a
+  | b y :: :: via_b
+
+defns Main :: 'U' ::=
+
+defn
+use s :: :: Use :: 'Use' by
+
+---------- :: choose
+use x y
+
+parsing
+  A_from_y <= B_from_x

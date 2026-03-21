@@ -26,6 +26,15 @@ The import test suite is organized by property, not by individual regression.
   See `menhir/README.md` for the property-level breakdown.
 - `per_input_scope`
   Tests per-importing-file scoping in multi-input runs.
+- `parsing`
+  Tests ambiguity resolution by `parsing` annotations that mix local and
+  imported productions, imported function-usage productions, and imported
+  judgement-vs-local-formula parses. Each positive case is paired with an
+  unresolved control run under `-picky_multiple_parses true`.
+- `parsing_errors`
+  Tests `parsing`-section scope failures: transitive-hidden imported prodnames,
+  ambiguous imported prodnames, and invalid root/class rename spellings for
+  imported member prodnames.
 - `tex_surface_names`
   Tests TeX rendering of imported bodies in the importer surface namespace.
 - `tex_link_hygiene`

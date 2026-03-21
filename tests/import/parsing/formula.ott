@@ -1,0 +1,26 @@
+import lib :: 'lib.ott' ::=
+{{ tex \input{lib} }}
+  | atom
+  | place
+  | core
+
+grammar
+
+value, v :: 'Val_' ::=
+  | atom :: :: atom
+
+formula :: formula_ ::=
+  | judgement :: :: judgement
+  | load place ==> value :: :: loadVal
+
+defns Main :: 'U' ::=
+
+defn
+use :: :: Use :: 'Use' by
+
+load unit ==> unit
+---------- :: base
+use
+
+parsing
+  Val_atom <= judgement_core

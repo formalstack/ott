@@ -1,0 +1,12 @@
+import transitive_lib :: 'transitive_lib.ott' ::=
+{{ tex \input{transitive_lib} }}
+  | expr
+
+grammar
+
+term, t :: 'Term_' ::=
+  | expr :: :: expr
+  | term seal :: :: seal
+
+parsing
+  Term_seal <= Atom_box

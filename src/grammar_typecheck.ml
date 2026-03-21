@@ -246,6 +246,265 @@ let fold_raw_items items =
   finish_raw_fragments
     (List.fold_left add_raw_item empty_raw_fragments items)
 
+type parsing_prod_metadata =
+  {
+    ppm_scope_names : string list;
+    ppm_allowed_judgement_roots : string list;
+    ppm_shadow_names : string list;
+  }
+
+type parsing_prod_entry =
+  {
+    ppe_canonical_name : prodname;
+    ppe_decl_source_file : string;
+    ppe_scope_names : string list;
+    ppe_allowed_judgement_roots : string list;
+  }
+
+type parsing_prod_catalog =
+  {
+    ppc_by_local_surface_name : (string, parsing_prod_entry list) Hashtbl.t;
+    ppc_by_provider_surface_name : (string, parsing_prod_entry list) Hashtbl.t;
+    ppc_by_shadow_name : (string, parsing_prod_entry list) Hashtbl.t;
+  }
+
+let add_parsing_prod_index_entry
+    (tbl : (string, parsing_prod_entry list) Hashtbl.t)
+    (key : string)
+    (entry : parsing_prod_entry) : unit =
+  let existing = match Hashtbl.find_opt tbl key with Some es -> es | None -> [] in
+  Hashtbl.replace tbl key (entry :: existing)
+
+let parsing_source_surface_name (name : string) : string =
+  match Import_naming.surface_of_internal_token name with
+  | Some surface -> surface
+  | None -> name
+
+let prefixed_shadow_names ~(owner : string) ~(member : string) : string list =
+  if owner = "" || member = "" then
+    []
+  else
+    let prefix = String.capitalize_ascii owner in
+    [prefix ^ member; prefix ^ "_" ^ member]
+
+let build_parsing_prod_metadata_map (fragments : raw_fragments)
+  : (string, parsing_prod_metadata) Hashtbl.t =
+  let by_prodname = Hashtbl.create 128 in
+  let add prodname metadata =
+    Hashtbl.replace by_prodname prodname metadata
+  in
+  List.iter (function
+    | Raw_RDC rdc ->
+      let class_name = parsing_source_surface_name rdc.raw_dc_name in
+      add ("judgement_" ^ rdc.raw_dc_name)
+        {
+          ppm_scope_names = [class_name];
+          ppm_allowed_judgement_roots = [class_name];
+          ppm_shadow_names = [];
+        };
+      List.iter (fun rd ->
+        let member_name = parsing_source_surface_name rd.raw_d_name in
+        add (rdc.raw_dc_wrapper ^ rd.raw_d_name)
+          {
+            ppm_scope_names = [class_name; member_name];
+            ppm_allowed_judgement_roots = [];
+            ppm_shadow_names =
+              prefixed_shadow_names ~owner:class_name ~member:member_name;
+          }
+      ) rdc.raw_dc_defns
+    | Raw_FDC rfdc ->
+      let class_name = parsing_source_surface_name rfdc.raw_fdc_name in
+      List.iter (fun rfd ->
+        let member_name = parsing_source_surface_name rfd.raw_fd_name in
+        let result_root_name =
+          parsing_source_surface_name rfd.raw_fd_result_type
+        in
+        add (rfd.raw_fd_pn_wrapper ^ rfd.raw_fd_name)
+          {
+            ppm_scope_names = [class_name; member_name];
+            ppm_allowed_judgement_roots = [];
+            ppm_shadow_names =
+              prefixed_shadow_names
+                ~owner:result_root_name ~member:member_name
+              @ prefixed_shadow_names ~owner:class_name ~member:member_name;
+          }
+      ) rfdc.raw_fdc_fundefns
+  ) fragments.dcs;
+  by_prodname
+
+let build_parsing_prod_catalog (import_ctx : import_context)
+    (fragments : raw_fragments) (rs : rule list) : parsing_prod_catalog =
+  let metadata_by_prodname = build_parsing_prod_metadata_map fragments in
+  let by_local_surface_name = Hashtbl.create 128 in
+  let by_provider_surface_name = Hashtbl.create 128 in
+  let by_shadow_name = Hashtbl.create 64 in
+  List.iter (fun r ->
+    let default_metadata =
+      {
+        ppm_scope_names = [parsing_source_surface_name r.rule_ntr_name];
+        ppm_allowed_judgement_roots = [];
+        ppm_shadow_names = [];
+      }
+    in
+    List.iter (fun p ->
+      let prod_loc =
+        match p.prod_loc with
+        | [] -> r.rule_loc
+        | _ -> p.prod_loc
+      in
+      let canonical_name = p.prod_name in
+      let local_surface_name =
+        match Import_naming.strip_module_wrapper_prefix canonical_name with
+        | Some stripped -> stripped
+        | None -> canonical_name
+      in
+      let provider_surface_name = Import.display_name import_ctx canonical_name in
+      let decl_source_file =
+        Import_naming.source_file_of_loc ~default:"" prod_loc
+      in
+      let metadata =
+        match Hashtbl.find_opt metadata_by_prodname canonical_name with
+        | Some metadata -> metadata
+        | None -> default_metadata
+      in
+      let entry =
+        {
+          ppe_canonical_name = canonical_name;
+          ppe_decl_source_file = decl_source_file;
+          ppe_scope_names = metadata.ppm_scope_names;
+          ppe_allowed_judgement_roots = metadata.ppm_allowed_judgement_roots;
+        }
+      in
+      add_parsing_prod_index_entry by_local_surface_name local_surface_name entry;
+      add_parsing_prod_index_entry by_provider_surface_name provider_surface_name entry;
+      List.iter
+        (fun shadow_name ->
+           add_parsing_prod_index_entry by_shadow_name shadow_name entry)
+        (List.sort_uniq String.compare metadata.ppm_shadow_names)
+    ) r.rule_ps
+  ) rs;
+  {
+    ppc_by_local_surface_name = by_local_surface_name;
+    ppc_by_provider_surface_name = by_provider_surface_name;
+    ppc_by_shadow_name = by_shadow_name;
+  }
+
+let parsing_prod_entries_by_name
+    (tbl : (string, parsing_prod_entry list) Hashtbl.t) (name : string)
+    : parsing_prod_entry list =
+  match Hashtbl.find_opt tbl name with
+  | Some entries -> entries
+  | None -> []
+
+type parsing_prod_scope_status =
+  | Parsing_prod_visible
+  | Parsing_prod_hidden
+  | Parsing_prod_unrelated
+
+type parsing_prod_resolution =
+  | Parsing_prod_resolved of parsing_prod_entry
+  | Parsing_prod_hidden_match of parsing_prod_entry list
+  | Parsing_prod_ambiguous of parsing_prod_entry list
+  | Parsing_prod_absent
+
+type parsing_prod_name_mode =
+  | Parsing_prod_local_surface
+  | Parsing_prod_provider_surface
+
+let parsing_prod_entry_scope_status
+    (import_ctx : import_context) ~(source_file : string)
+    (entry : parsing_prod_entry) : parsing_prod_scope_status =
+  if entry.ppe_decl_source_file = source_file then
+    Parsing_prod_visible
+  else if entry.ppe_decl_source_file = ""
+          || not (Import.is_imported_file import_ctx entry.ppe_decl_source_file)
+  then
+    Parsing_prod_visible
+  else
+    match Import.lookup_scope_info import_ctx source_file with
+    | None -> Parsing_prod_unrelated
+    | Some scope ->
+      if List.exists
+          (fun name -> List.mem name scope.si_explicit_names)
+          entry.ppe_scope_names
+         || List.exists
+              (fun name -> List.mem name scope.si_allowed_judgement_roots)
+              entry.ppe_allowed_judgement_roots
+      then
+        Parsing_prod_visible
+      else if List.exists
+          (fun name -> List.mem name scope.si_transitive_hidden_names)
+          entry.ppe_scope_names
+      then
+        Parsing_prod_hidden
+      else
+        Parsing_prod_unrelated
+
+let resolve_parsing_prod_entries
+    (import_ctx : import_context) ~(source_file : string)
+    (entries : parsing_prod_entry list) : parsing_prod_resolution =
+  let visible, hidden =
+    List.fold_left (fun (visible, hidden) entry ->
+      match parsing_prod_entry_scope_status import_ctx ~source_file entry with
+      | Parsing_prod_visible -> (entry :: visible, hidden)
+      | Parsing_prod_hidden -> (visible, entry :: hidden)
+      | Parsing_prod_unrelated -> (visible, hidden)
+    ) ([], []) entries
+  in
+  match List.rev visible with
+  | [entry] -> Parsing_prod_resolved entry
+  | [] ->
+    if hidden = [] then
+      Parsing_prod_absent
+    else Parsing_prod_hidden_match (List.rev hidden)
+  | entries -> Parsing_prod_ambiguous entries
+
+let resolve_shadowed_parsing_prod_entries
+    (import_ctx : import_context) ~(source_file : string)
+    (catalog : parsing_prod_catalog) (raw_pn : string) : parsing_prod_entry list =
+  List.filter
+    (fun entry ->
+       match parsing_prod_entry_scope_status import_ctx ~source_file entry with
+       | Parsing_prod_visible | Parsing_prod_hidden -> true
+       | Parsing_prod_unrelated -> false)
+    (parsing_prod_entries_by_name catalog.ppc_by_shadow_name raw_pn)
+
+let parsing_prod_context (entry : parsing_prod_entry) : string =
+  let src =
+    if entry.ppe_decl_source_file = "" then "<unknown file>"
+    else Filename.basename entry.ppe_decl_source_file
+  in
+  "\"" ^ entry.ppe_canonical_name ^ "\" from " ^ src
+
+let parsing_prod_ambiguity_message
+    (raw_pn : string) (entries : parsing_prod_entry list) : string =
+  "ambiguous prodname \"" ^ raw_pn
+  ^ "\" used in parsing annotation declaration; visible matches: "
+  ^ String.concat ", " (List.map parsing_prod_context entries)
+
+let parsing_prod_not_in_scope_message (raw_pn : string) : string =
+  "prodname \"" ^ raw_pn
+  ^ "\" used in parsing annotation declaration is not in scope"
+
+let resolve_parsing_prod_name
+    (import_ctx : import_context) (catalog : parsing_prod_catalog)
+    ~(source_file : string) ~(mode : parsing_prod_name_mode)
+    (raw_pn : string) : parsing_prod_resolution =
+  let direct_entries =
+    match mode with
+    | Parsing_prod_local_surface ->
+      parsing_prod_entries_by_name catalog.ppc_by_local_surface_name raw_pn
+    | Parsing_prod_provider_surface ->
+      parsing_prod_entries_by_name catalog.ppc_by_provider_surface_name raw_pn
+  in
+  match resolve_parsing_prod_entries import_ctx ~source_file direct_entries with
+  | Parsing_prod_absent when mode = Parsing_prod_local_surface ->
+    (match resolve_shadowed_parsing_prod_entries import_ctx ~source_file catalog raw_pn with
+     | [] -> Parsing_prod_absent
+     | entries -> Parsing_prod_hidden_match entries)
+  | resolution ->
+    resolution
+
 let pp_raw_fragments fragments =
   String.concat "" (List.map Grammar_pp.pp_raw_item (List.map (fun md -> Raw_item_md md) fragments.mds))
   ^ (match fragments.rs with [] -> "" | rs -> Grammar_pp.pp_raw_item (Raw_item_rs rs))
@@ -1363,22 +1622,54 @@ and cd_embeds c (rel:raw_embed list) : embed list =
   List.iter allowed rel;
   List.map Auxl.collapse_embed rel
 
-and cd_parsing_annotation all_prod_names (par:raw_parsing_annotations) : parsing_annotation list =
-  let check_prod_name raw_pn = 
-    if not (List.mem raw_pn all_prod_names) then 
-      ty_error2 
-        (Auxl.loc_of_raw_parsing_annotation par)
+and cd_parsing_annotation import_ctx
+    (catalog : parsing_prod_catalog) (par:raw_parsing_annotations)
+    : parsing_annotation list =
+  let parsing_loc = Auxl.loc_of_raw_parsing_annotation par in
+  let imported_annotation = Import.is_imported_loc import_ctx parsing_loc in
+  let parsing_source_file =
+    Import_naming.source_file_of_loc ~default:"" parsing_loc
+  in
+  let resolve_prod_name raw_pn =
+    let mode =
+      if imported_annotation then Parsing_prod_provider_surface
+      else Parsing_prod_local_surface
+    in
+    match resolve_parsing_prod_name import_ctx catalog
+            ~source_file:parsing_source_file ~mode raw_pn with
+    | Parsing_prod_resolved entry ->
+      Some entry.ppe_canonical_name
+    | Parsing_prod_ambiguous entries ->
+      ty_error2 parsing_loc
+        (parsing_prod_ambiguity_message raw_pn entries)
+        ""
+    | Parsing_prod_hidden_match _ when imported_annotation ->
+      None
+    | Parsing_prod_absent when imported_annotation ->
+      None
+    | Parsing_prod_hidden_match _ ->
+      ty_error2 parsing_loc
+        (parsing_prod_not_in_scope_message raw_pn)
+        ""
+    | Parsing_prod_absent ->
+      ty_error2
+        parsing_loc
         ("undefined prodname \""^raw_pn^"\" used in parsing annotation declaration")
-        "" in
-  List.map 
-      (fun (raw_pn1,pa,raw_pn2) -> 
-        check_prod_name raw_pn1;
-        check_prod_name raw_pn2;
-        (raw_pn1, pa, raw_pn2,par.raw_pa_loc)) 
+        ""
+  in
+  List.filter_map
+      (fun (raw_pn1,pa,raw_pn2) ->
+        match resolve_prod_name raw_pn1, resolve_prod_name raw_pn2 with
+        | Some pn1, Some pn2 ->
+          Some (pn1, pa, pn2,par.raw_pa_loc)
+        | _ ->
+          None)
     par.raw_pa_data
     
-and cd_parsing_annotations c pars =
-  { pa_data = List.flatten (List.map (cd_parsing_annotation c) pars); }
+and cd_parsing_annotations import_ctx catalog pars =
+  { pa_data =
+      List.flatten
+        (List.map (cd_parsing_annotation import_ctx catalog) pars) }
 (*     pa_loc = dummy_loc } *)
 
 (* check_and_disambiguate ********************************************** *)
@@ -1944,7 +2235,9 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
   let xd =
     let srs,srd = cd_subrules c fragments.srs in
     let rs = List.map (cd_rule c) fragments.rs in
-    let all_prod_names = List.flatten (List.map (fun r -> List.map (fun p->p.prod_name) r.rule_ps) rs) in
+    let parsing_prod_catalog =
+      build_parsing_prod_catalog import_ctx fragments rs
+    in
     { xd_mds = List.map 
 	(fun (mvd:raw_metavardefn) -> 
 	  let mvd_rep = cd_metavarrep c mvd.raw_mvd_name mvd.raw_mvd_rep in 
@@ -1976,7 +2269,9 @@ let rec check_and_disambiguate m_tex (quotient_rules:bool) (generate_aux_rules:b
       xd_embed_preamble = cd_embeds c raw_embed_preamble;
       xd_embed = cd_embeds c raw_embed_whole_file;
       xd_isa_imports = raw_isa_imports;
-      xd_pas = cd_parsing_annotations all_prod_names fragments.pas;
+      (* Canonicalize parsing prodnames here so parser construction only sees
+         internal production identifiers, never import-surface spellings. *)
+      xd_pas = cd_parsing_annotations import_ctx parsing_prod_catalog fragments.pas;
       xd_imports = import_ctx;
     } in
 

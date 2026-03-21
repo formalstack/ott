@@ -1,0 +1,29 @@
+import lib :: 'lib.ott' ::=
+{{ tex \input{lib} }}
+  | atom
+  | result
+  | Fold :: UseFold
+
+grammar
+
+expr, e :: 'Expr_' ::=
+  | atom :: :: atom
+  | box atom end :: :: boxLocal
+
+calc, c :: 'Calc_' ::=
+  | result :: :: result
+  | fold atom end :: :: foldLocal
+
+defns Main :: 'U' ::=
+
+defn
+use_expr expr :: :: UseExpr :: 'UseExpr' by
+
+---------- :: choose_box
+use_expr box unit end
+
+defn
+use_fundefn calc :: :: UseFundefn :: 'UseFundefn' by
+
+---------- :: choose_fold
+use_fundefn fold unit end

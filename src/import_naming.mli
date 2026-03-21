@@ -21,6 +21,10 @@ val internalize_name : src:string -> is_indexvar:(string -> bool) -> name:string
 (** Wrapper prefix used to namespace injected backend identifiers for a module. *)
 val wrapper_prefix_for_module : module_name:string -> string
 
+(** Strip only the per-module import wrapper prefix, leaving any remaining
+    internalization untouched. *)
+val strip_module_wrapper_prefix : string -> string option
+
 (** Inverse of the internal naming scheme, for user-facing pretty-printing.
 
     Operates on *tokens* (raw identifier strings) and therefore also handles
